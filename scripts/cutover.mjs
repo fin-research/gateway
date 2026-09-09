@@ -30,7 +30,7 @@ console.log(JSON.stringify({ apply, routes: routes.map(r => ({ pattern: r.patter
 if (!apply) process.exit(0);
 // Private snapshots support a deliberate rollback; never print policies or credentials.
 await mkdir(new URL('../.ops/', import.meta.url), { recursive: true, mode: 0o700 });
-await writeFile(new URL('../.ops/cutover-before-' + Date.now() + '.json', import.meta.url), JSON.stringify({ routes, access: app }), { mode: 0o600 });
+await writeFile(new URL('../.ops/cutover-before-' + Date.now() + '.json', import.meta.url), JSON.stringify({ routes, access: app, policies: app ? await api(`${appsPath}/${appId}/policies`, 'GET', undefined, true) : [] }), { mode: 0o600 });
 const gateway = await api(`accounts/${account}/workers/scripts/eastmoney-gateway/settings`);
 for (const [name, service, entrypoint] of [['DASHBOARD', 'eastmoney-dashboard', 'GatewayDashboard'], ['DATA', 'eastmoney-data', 'GatewayData']]) {
   if (!gateway.bindings.some(binding => binding.name === name && binding.service === service && binding.entrypoint === entrypoint)) throw new Error('Gateway downstream binding not ready');
