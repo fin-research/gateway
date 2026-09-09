@@ -40,3 +40,17 @@ Write、MCP Servers Write、Access 应用/策略编辑和 hasbai.xyz DNS 编辑�
 参考：[Cloudflare MCP portals](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/)、
 [Create portal](https://developers.cloudflare.com/api/resources/zero_trust/subresources/access/subresources/ai_controls/subresources/mcp/subresources/portals/methods/create/)、
 [AI Search MCP](https://developers.cloudflare.com/ai-search/api/search/mcp/)。
+
+## 2026-09-09 发布验证
+
+- Data 68 项、Gateway 42 项、Dashboard 443 项自动测试通过；三个仓库的类型检查、构建或 Worker dry-run 通过，真实后端处理器联调 32 项通过。
+- 生产 OpenAPI 为 0.6.0，`servers=/data`；四个来源分组和 GatewaySession/Auth0Bearer 已回读。
+- 匿名 `/choice/css`、`/data/choice/css`、`/data/mcp`、`/mcp` 均为 401 `LOGIN_REQUIRED`。
+- 真实 `test@18.cn` 登录成功，58 项有效权限；常规匿名/账号探针 68 项通过。新增 MCP POST 探针先遇到旧 HTTP 验证器的登录表单限制，改为固定站点 JSON 请求后单独重跑 `--mcp-only`，结果 `failures=[]`。
+- Data MCP：initialize、23 工具目录、health、缺参 Choice 拒绝通过；统一 MCP：initialize、24 工具目录、data_health、缺参 Choice 拒绝以及真实 research search 均通过。
+- DM/Choice/CAMEL edge VPC smoke 可达：DM 匿名上游 401，Choice/CAMEL 上游 200；这区分连通性与业务认证。另以正式 Data CFETS 返回 11 行有效 DTO。临时 smoke Worker 已删除。
+- Data/Dashboard 的 workers.dev 和 previews 均关闭，直接源站探针 404。Auth0 callback/logout 回读仅本站地址，没有旧 Access callback。
+- 首次统一 MCP 生产探针发现 Workers 不接受 `redirect: error`；已改为 manual 并显式拒绝 3xx，同时使用 SDK 的 CfWorkerJsonSchemaValidator，避免运行时动态代码生成。
+- 修复后的手动 Gateway 版本为 `e8550849-6180-4dc3-be57-38ff8dba8500`；Data/Gateway/Dashboard 均已推送 main。Git 自动部署可能生成新的版本号，不能仅凭时间推断构建归属。
+- 生产 CPU 观测 API 返回 403/10000，未取得 MCP 生产 CPU 数据，未声明 Free 10ms 达标。没有执行浏览器或截图验收。
+- `mcp.hasbai.xyz` 托管门户仍未创建，原因和所需凭据见上节。
