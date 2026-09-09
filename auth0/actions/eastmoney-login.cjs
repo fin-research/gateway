@@ -1,6 +1,7 @@
 // Auth0 post-login Action: eastmoney login claims (node22).
+const MCP_CLIENT_ID = 'M1a5PF3UJaFIZv1k4HO4IV06Z5fXQBHV';
 exports.onExecutePostLogin = async (event, api) => {
-  if (event.client.client_id !== event.secrets.EASTMONEY_CLIENT_ID) return;
+  if (![event.secrets.EASTMONEY_CLIENT_ID, MCP_CLIENT_ID].includes(event.client.client_id)) return;
   const metadata = event.user.app_metadata || {};
   const legacy = metadata.migrated_from === 'neon'
     && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(metadata.neon_auth_user_id || '')
@@ -17,7 +18,7 @@ exports.onExecutePostLogin = async (event, api) => {
 };
 
 exports.onContinuePostLogin = async (event, api) => {
-  if (event.client.client_id !== event.secrets.EASTMONEY_CLIENT_ID) return;
+  if (![event.secrets.EASTMONEY_CLIENT_ID, MCP_CLIENT_ID].includes(event.client.client_id)) return;
   // The page starts a fresh login after verification. A direct /continue request
   // must never turn the suspended, unverified transaction into an authenticated one.
   api.access.deny('请完成邮箱验证后重新登录');

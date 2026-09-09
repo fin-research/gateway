@@ -9,7 +9,6 @@ import { profileRequest } from './identity-service.ts';
 import { publicSession } from './lib/identity.ts';
 import { Hono } from 'hono';
 import { ProfileError } from './lib/server/profile.ts';
-import { unifiedMcp } from './mcp.ts';
 
 export const app = new Hono<{ Bindings: Env }>({ strict: false });
 app.use('*', async (c, next) => {
@@ -23,7 +22,9 @@ app.use('*', async (c, next) => {
 });
 app.on('GET', ['/auth/login', '/financing/login'], c => login(c.req.raw, c.env));
 app.get('/auth/callback', c => callback(c.req.raw, c.env));
-app.all('/mcp', unifiedMcp);
+// The single aggregate endpoint is hosted by Cloudflare MCP Portals. Do not
+// redirect POST requests across origins with caller credentials or proxy tools.
+app.all('/mcp', c => c.json({ detail: '统一 MCP 入口已迁移至 Cloudflare MCP 门户', mcpUrl: 'https://mcp.hasbai.xyz/mcp' }, 410, { 'Cache-Control': 'no-store' }));
 app.on(['GET', 'POST'], ['/auth/logout', '/financing/logout'], c => { requireSameOrigin(c.req.raw); return logout(c.env); });
 app.all('*', async c => {
     const request = c.req.raw, env = c.env;

@@ -60,4 +60,4 @@ Worker Secret：`AUTH0_CLIENT_SECRET`、`AUTH0_MANAGEMENT_CLIENT_SECRET`、`SESS
 
 ## MCP 与错误语义
 
-`src/mcp.ts` 聚合 Data 和 research MCP；端点、Cloudflare 托管门户目标和配置阻断见 [MCP](MCP.md)。`pnpm auth:verify` 含真实 MCP 初始化、工具目录、只读调用和输入错误探针。匿名保护请求先返回 401；已登录的未登记入口返回 403 `ROUTE_NOT_REGISTERED`，账号拒绝仍为 `ACCESS_DENIED`。
+统一入口由 Cloudflare MCP Portals 提供；端点、Auth0 和 Keychain 配置见 [MCP](MCP.md)。Gateway 的旧 `/mcp` 已退役。`pnpm auth:verify` 含真实 MCP 初始化、工具目录、只读调用和输入错误探针。匿名保护请求先返回 401；已登录的未登记入口返回 403 `ROUTE_NOT_REGISTERED`，账号拒绝仍为 `ACCESS_DENIED`。

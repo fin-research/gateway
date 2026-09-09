@@ -22,8 +22,8 @@ export async function userIdentity(request: Request, env: Env, optional = false)
   return identityFromPayload(payload, env);
 }
 
-function identityFromPayload(payload: JWTPayload, env: Env): SiteIdentity {
-  if (!/^auth0\|[^\s]{1,249}$/.test(payload.sub ?? '') || payload.azp !== env.AUTH0_CLIENT_ID || payload.gty === 'client-credentials') throw new AccessError(403, '请使用本站用户账号登录');
+function identityFromPayload(payload: JWTPayload, env: Env, clientId: string = env.AUTH0_CLIENT_ID): SiteIdentity {
+  if (!/^auth0\|[^\s]{1,249}$/.test(payload.sub ?? '') || payload.azp !== clientId || payload.gty === 'client-credentials') throw new AccessError(403, '请使用本站用户账号登录');
   const email = String(payload[EMAIL_CLAIM] ?? '').trim().toLowerCase();
   if (!/^[^@\s]+@18\.cn$/.test(email)) throw new AccessError(403, '请使用 18.cn 邮箱登录');
   return { id: payload.sub!, auth0Id: payload.sub!, email, issuedAt: payload.iat!, expiresAt: payload.exp! };
@@ -73,6 +73,8 @@ export async function authorizeData(request: Request, env: Env, fetcher: typeof 
       || !(path.startsWith('/data/choice/') && ['GET', 'HEAD'].includes(request.method) || path === '/data/graphql' && request.method === 'POST')) throw new AccessError(403, '机器身份无权执行该操作');
     return;
   }
-  const user = identityFromPayload(payload, env);
+  const isMcpClient = new URL(request.url).pathname.replace(/\/$/, '') === '/data/mcp'
+    && env.AUTH0_MCP_CLIENT_ID && payload.azp === env.AUTH0_MCP_CLIENT_ID;
+  const user = identityFromPayload(payload, env, isMcpClient ? env.AUTH0_MCP_CLIENT_ID : env.AUTH0_CLIENT_ID);
   await createDirectory(env, fetcher).current(user, false);
 }

@@ -1,56 +1,53 @@
-# MCP 入口
+# Cloudflare MCP 门户
 
-`https://eastmoney.hasbai.xyz/mcp` 聚合 Data 与研究库 AI Search，独立 Data 入口为
-`https://eastmoney.hasbai.xyz/data/mcp`。使用 Hono MCP 的 Streamable HTTP、无状态 JSON
-响应。每次请求重新验证 Auth0 账号；所有有效登录用户均可访问。Quant 机器 scope 不扩展到 MCP。
+项目唯一统一入口为 `https://mcp.hasbai.xyz/mcp`，由 Cloudflare MCP Portals 托管。
+Gateway 不再聚合 MCP；旧 `https://eastmoney.hasbai.xyz/mcp` 返回 410 和新端点提示，不转发工具或登录凭据。
+Data 单资源 MCP 保留在 `https://eastmoney.hasbai.xyz/data/mcp`，作为门户上游；REST、OpenAPI 和 MCP 复用 Data 的资源 Schema。
 
-客户端携带本站 Auth0 API Bearer JWT，或 Gateway 会话 Cookie（POST 必须带本站 Origin）。
-没有开放动态 OAuth 客户端注册，不能假定只粘贴 URL 就能交互登录。GET/DELETE 在认证后
-返回 405，通知返回 202，请求体上限 64 KiB。
+## 资源与认证
 
-| 前缀 | 端点 | 边界 |
+| 资源 | 地址/ID | 边界 |
 |---|---|---|
-| `data_` | DATA → GatewayData `/data/mcp` | 命名 binding 和 verdict；不走公网回环 |
-| `search_` | `https://research.hasbai.xyz/mcp` | research 的 search；不转发用户凭据，不接入 credit |
+| 托管门户 | `mcp.hasbai.xyz/mcp`；portal `eastmoney` | Cloudflare Access managed OAuth，允许已登录的 18.cn 账号 |
+| Data 上游 | `eastmoney.hasbai.xyz/data/mcp`；server `data` | Auth0 逐用户 OAuth，`on_behalf=true`；Gateway 验证当前账号状态 |
+| 研究库上游 | `research.hasbai.xyz/mcp`；server `research` | AI Search research；不接入 credit 私密材料库 |
 
-工具定义从上游动态读取；来源前缀防止重名，调用保留上游参数 Schema。禁止客户端指定上游
-URL，连接/调用分别限时 60 秒，分页有界。列表失败显式报错，执行失败返回 `isError`。
-研究查询按共享 AI 规范提供 `published_at` 硬过滤及 `max_num_results=50`。
+独立 Auth0 客户端 `eastmoney MCP portal`（`M1a5PF3UJaFIZv1k4HO4IV06Z5fXQBHV`）用于门户 IdP
+和 Data 上游授权。Auth0 post-login Action 对其应用本站相同的邮箱验证和 18.cn 限制。
+Gateway 仅在 `/data/mcp` 接受此客户端的 API JWT，不扩大到 Dashboard、CAMEL 或通用 REST。
+既有网页客户端和 Quant 机器权限保持原范围；旧站点 Access 应用不恢复。
 
-## 托管门户目标与阻断
+门户配置独立 IdP `Eastmoney MCP Auth0`。Data、research 各有 `mcp` 类型 Access 应用，
+通过 `via_mcp_server_portal` destination 约束门户内的工具访问，不在 Data 公网路径外再加 Access。
+门户使用 `mcp_portal` 应用及 managed OAuth；动态客户端注册支持 localhost/loopback 回调，
+Access token 15 分钟、grant session 14 天。其他远端客户端需登记精确 HTTPS 回调。
 
-用户指定 `mcp.hasbai.xyz`，客户端目标 `https://mcp.hasbai.xyz/mcp`。Cloudflare 托管门户
-依赖独立 Access 应用，不恢复本站旧 Access 应用，也不移动站点现有 Worker 路由。
+Data 上游的 manual OAuth 配置通过 authorization endpoint 的 audience 参数请求本站 API token，
+并使用 `openid profile email offline_access`。API 允许 offline access，门户客户端使用有期限的 refresh token；
+普通网页客户端没有新增 refresh_token grant。门户保存的客户端 Secret 不回读、不写本地文件。
 
-- 门户 ID `eastmoney`，proxied CNAME `mcp.hasbai.xyz` → `gateway.agents.cloudflare.com`。
-- 上游 `data`：本站 `/data/mcp`，用户 Auth0 OAuth，mapping `on_behalf: true`；禁止长期保存短期用户 JWT 或改成匿名。
-- 上游 `research`：`https://research.hasbai.xyz/mcp`，保留上游域名限制。
-- 门户及两项服务器的 Access 策略允许已登录 `18.cn` 用户。
-- Data OAuth 尚需配置 API audience、客户端、精确 portal callback 和 discovery，再通过程序化 HTTP 验证；Cookie 不跨域复用。
+Code Mode 当前关闭。工具定义和执行由 Cloudflare 转发；研究查询由调用方显式提供
+`published_at` 的 Unix 毫秒硬过滤和 `max_num_results=50`，遵循共享 AI 规范。
 
-2026-09-09 实测：旧 `search.hasbai.xyz/mcp` 返回 Cloudflare 1014；AI Search 实例已绑定
-`research.hasbai.xyz` 且关闭默认域名，新地址 initialize/tools/list 均为 200。
-根目录两枚旧 Cloudflare Token 的 verify 均返回 401 `Invalid API Token`；Wrangler OAuth
-可读取 Workers/AI Search，但门户和 DNS API 返回 403/10000。尚未创建托管门户、DNS 或其 Access 应用。
+## 配置所有权
 
-有效 Token 放在项目组未跟踪 `.env` 的 `CLOUDFLARE_MCP_API_TOKEN`，权限包括 MCP Portals
-Write、MCP Servers Write、Access 应用/策略编辑和 hasbai.xyz DNS 编辑。
-运行 `node --use-env-proxy scripts/mcp-portal-preflight.mjs` 只读盘点；工作树设置 `EASTMONEY_ENV_FILE`。
+- `scripts/configure-mcp-portal.mjs upstreams` 创建独立 IdP 与 Data manual OAuth 上游。
+- `scripts/configure-mcp-portal.mjs applications` 建立门户及上游 Access 策略、映射和 DNS。
+- DNS 为 proxied CNAME `mcp.hasbai.xyz` → `gateway.agents.cloudflare.com`。
+- Auth0 配置经显式资源 Deploy CLI export/plan/apply；数据库连接仅追加门户客户端，保留已有客户端。
+- Auth0 Action 发布只 patch code，保留 Secret、依赖和绑定；MCP client ID 与 Wrangler 配置同步。
 
-参考：[Cloudflare MCP portals](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/)、
-[Create portal](https://developers.cloudflare.com/api/resources/zero_trust/subresources/access/subresources/ai_controls/subresources/mcp/subresources/portals/methods/create/)、
-[AI Search MCP](https://developers.cloudflare.com/ai-search/api/search/mcp/)。
+Cloudflare 凭据遵循项目组 AGENTS 的 Keychain 规则。`scripts/cloudflare-task-session.py` 只用账户级
+Root Token 管理短期任务 Token，资源操作由子进程环境中的派生 Token 完成；所有值只驻留进程内存。
+脚本接受 stdin JSON 的 `run` / `api` 命令，收到 `close` 或 EOF 撤销 Token。禁止把任何 Cloudflare
+Token 写入 `.env`、命令参数或临时文件。`mcp-portal-preflight.mjs` 从派生子进程环境读取 Token。
 
-## 2026-09-09 发布验证
+## 验证
 
-- Data 68 项、Gateway 42 项、Dashboard 443 项自动测试通过；三个仓库的类型检查、构建或 Worker dry-run 通过，真实后端处理器联调 32 项通过。
-- 生产 OpenAPI 为 0.6.0，`servers=/data`；四个来源分组和 GatewaySession/Auth0Bearer 已回读。
-- 匿名 `/choice/css`、`/data/choice/css`、`/data/mcp`、`/mcp` 均为 401 `LOGIN_REQUIRED`。
-- 真实 `test@18.cn` 登录成功，58 项有效权限；常规匿名/账号探针 68 项通过。新增 MCP POST 探针先遇到旧 HTTP 验证器的登录表单限制，改为固定站点 JSON 请求后单独重跑 `--mcp-only`，结果 `failures=[]`。
-- Data MCP：initialize、23 工具目录、health、缺参 Choice 拒绝通过；统一 MCP：initialize、24 工具目录、data_health、缺参 Choice 拒绝以及真实 research search 均通过。
-- DM/Choice/CAMEL edge VPC smoke 可达：DM 匿名上游 401，Choice/CAMEL 上游 200；这区分连通性与业务认证。另以正式 Data CFETS 返回 11 行有效 DTO。临时 smoke Worker 已删除。
-- Data/Dashboard 的 workers.dev 和 previews 均关闭，直接源站探针 404。Auth0 callback/logout 回读仅本站地址，没有旧 Access callback。
-- 首次统一 MCP 生产探针发现 Workers 不接受 `redirect: error`；已改为 manual 并显式拒绝 3xx，同时使用 SDK 的 CfWorkerJsonSchemaValidator，避免运行时动态代码生成。
-- 修复后的手动 Gateway 版本为 `e8550849-6180-4dc3-be57-38ff8dba8500`；Data/Gateway/Dashboard 均已推送 main。Git 自动部署可能生成新的版本号，不能仅凭时间推断构建归属。
-- 生产 CPU 观测 API 返回 403/10000，未取得 MCP 生产 CPU 数据，未声明 Free 10ms 达标。没有执行浏览器或截图验收。
-- `mcp.hasbai.xyz` 托管门户仍未创建，原因和所需凭据见上节。
+`pnpm check`、`pnpm deploy:dry`、Gateway 联调和真实账号 HTTP 验证覆盖旧入口退役、Data 用户
+和机器边界。Cloudflare 门户需要单独验证 managed OAuth、上游用户授权和工具发现/调用。
+没有执行的交互层、浏览器或生产 CPU 检查不能由配置成功替代。
+
+官方依据：[MCP Portals](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/)、
+[Managed OAuth](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/)、
+[账户 Token 签发](https://developers.cloudflare.com/fundamentals/api/how-to/create-via-api/)。

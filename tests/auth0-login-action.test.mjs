@@ -69,3 +69,12 @@ test('other Auth0 applications remain unaffected on execute and continue', async
   await action.onContinuePostLogin(event, api);
   assert.deepEqual(calls, { denied: [], redirected: [], claims: [] });
 });
+
+test('the dedicated portal client receives the same verified-user gate and claims', async () => {
+  for (const verified of [false, true]) {
+    const { event, api, calls } = context({ email: 'test@18.cn', email_verified: verified }, { client: 'M1a5PF3UJaFIZv1k4HO4IV06Z5fXQBHV' });
+    await action.onExecutePostLogin(event, api);
+    assert.equal(calls.claims.length, verified ? 1 : 0);
+    assert.equal(calls.redirected.length, verified ? 0 : 1);
+  }
+});

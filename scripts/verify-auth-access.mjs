@@ -37,7 +37,7 @@ export const ACCESS_PROBES = [
   ['login', '/data/choice/edb', [422]],
   ['login', '/data/camel', [404]],
   ['login', '/data/mcp', [405]],
-  ['login', '/mcp', [405]],
+  ['public', '/mcp', [410]],
 ];
 
 function denied(response) {
@@ -76,7 +76,7 @@ async function main() {
       granted: permitted, status: response.status, passed, ...(failureDetail ? { detail: failureDetail } : {}) }));
     if (!passed) failures.push(`test-account ${scope}`);
   }
-  for (const path of ['/data/mcp', '/mcp']) {
+  for (const path of ['/data/mcp']) {
     let id = 0;
     const rpc = async (method, params) => {
       // Keep login form submission restricted to Auth0. Only this fixed pair of
@@ -92,18 +92,14 @@ async function main() {
     await rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'eastmoney-verification', version: '1' } });
     const list = await rpc('tools/list', {});
     const names = list.tools.map(tool => tool.name);
-    const expected = path === '/data/mcp' ? 23 : 24;
+    const expected = 23;
     if (names.length !== expected) failures.push(`${path} tool count`);
-    const call = await rpc('tools/call', { name: path === '/data/mcp' ? 'health' : 'data_health', arguments: {} });
+    const call = await rpc('tools/call', { name: 'health', arguments: {} });
     if (call.isError || call.structuredContent?.data?.status !== 'ok') failures.push(`${path} health`);
-    const invalid = await rpc('tools/call', { name: path === '/data/mcp' ? 'choice_css' : 'data_choice_css', arguments: {} });
+    const invalid = await rpc('tools/call', { name: 'choice_css', arguments: {} });
     if (invalid.isError !== true) failures.push(`${path} validation`);
     console.log(JSON.stringify({ identity: config.email, path, initialize: true, tools: names.length, health: call.structuredContent?.data?.status, invalidChoiceRejected: invalid.isError === true }));
-    if (path === '/mcp') {
-      const search = await rpc('tools/call', { name: 'search_search', arguments: { query: '债券发行', ai_search_options: { retrieval: { metadata_only: true } } } });
-      if (search.isError) failures.push('research MCP search');
-      console.log(JSON.stringify({ identity: config.email, path, researchSearch: !search.isError, contentBlocks: search.content?.length }));
-    }
+
   }
   console.log(JSON.stringify({ programmaticLogin: true, browserUsed: false, probes: probes.length * 2,
     testAccount: config.email, permissions: permissions.size, failures }));

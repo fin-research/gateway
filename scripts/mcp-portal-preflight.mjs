@@ -1,9 +1,5 @@
-import { readFile } from 'node:fs/promises';
-import { parseEnv } from 'node:util';
-const file = process.env.EASTMONEY_ENV_FILE || new URL('../../eastmoney/.env', import.meta.url);
-const env = parseEnv(await readFile(file, 'utf8'));
-const token = env.CLOUDFLARE_MCP_API_TOKEN;
-if (!token) throw new Error('Set CLOUDFLARE_MCP_API_TOKEN in the untracked project-root .env');
+const token = process.env.CLOUDFLARE_API_TOKEN;
+if (!token) throw new Error('Run through the Keychain-backed cloudflare-task-session.py');
 const account = '5cecc63c78acf8f5473f8745f4244448';
 const zone = 'e0665efd9fd68d06cbb9ab68a13cc7c6';
 let failed = false;
