@@ -1,5 +1,5 @@
 import { setTimeout as pause } from 'node:timers/promises';
-import { AuthTestError, SITE_ORIGIN, createHttpSession, loginTestAccount, readAuthTestConfig } from './lib/programmatic-login.mjs';
+import { AuthTestError, SITE_ORIGIN, createHttpSession, loginTestAccount, readAuthTestConfig, boundedText } from './lib/programmatic-login.mjs';
 
 // GET only. Missing-record probes verify the authorization/validation boundary
 // without querying paid Choice data, generating AI, or mutating business state.
@@ -54,7 +54,8 @@ async function main() {
   const config = await readAuthTestConfig();
   const anonymous = createHttpSession();
   const failures = [];
-  for (const [scope, path, expected] of ACCESS_PROBES) {
+  const probes = process.argv.includes('--mcp-only') ? [] : ACCESS_PROBES;
+  for (const [scope, path, expected] of probes) {
     const response = await anonymous.request(SITE_ORIGIN + path, { headers: { Accept: path.startsWith('/api/') || path.startsWith('/data/') ? 'application/json' : 'text/html' }, followRedirects: false });
     const passed = scope === 'public' ? expected.includes(response.status) : denied(response);
     console.log(JSON.stringify({ identity: 'anonymous', scope, path: new URL(path, SITE_ORIGIN).pathname, status: response.status, passed }));
@@ -62,7 +63,7 @@ async function main() {
   }
   const session = await loginTestAccount(config);
   const permissions = new Set((session.profile.permissions ?? []).map(item => item.name));
-  for (const [scope, path, expected] of ACCESS_PROBES) {
+  for (const [scope, path, expected] of probes) {
     await pause(1500);
     const response = await session.request(SITE_ORIGIN + path, { headers: { Accept: path.startsWith('/api/') || path.startsWith('/data/') ? 'application/json' : 'text/html' }, followRedirects: false });
     const permitted = ['public', 'login'].includes(scope) || permissions.has(scope);
@@ -78,12 +79,14 @@ async function main() {
   for (const path of ['/data/mcp', '/mcp']) {
     let id = 0;
     const rpc = async (method, params) => {
-      const response = await session.request(SITE_ORIGIN + path, { method: 'POST', followRedirects: false,
-        headers: { Origin: SITE_ORIGIN, Accept: 'application/json, text/event-stream', 'Content-Type': 'application/json' },
+      // Keep login form submission restricted to Auth0. Only this fixed pair of
+      // read-only MCP endpoints receives JSON and the already verified site cookie.
+      const response = await fetch(SITE_ORIGIN + path, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(60000),
+        headers: { Origin: SITE_ORIGIN, Cookie: session.cookies.header(SITE_ORIGIN + path), Accept: 'application/json, text/event-stream', 'Content-Type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }),
       });
-      const payload = JSON.parse(response.text);
-      if (response.status !== 200 || payload.error) throw new AuthTestError('MCP_VERIFICATION_FAILED', `${path} ${method} failed`);
+      const payload = JSON.parse(await boundedText(response));
+      if (response.status !== 200 || payload.error) throw new AuthTestError('MCP_VERIFICATION_FAILED', `${path} ${method} failed: HTTP ${response.status}, RPC ${payload.error?.code ?? 'none'}, ${String(payload.error?.message ?? '').slice(0, 300)}`);
       return payload.result;
     };
     await rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'eastmoney-verification', version: '1' } });
@@ -102,7 +105,7 @@ async function main() {
       console.log(JSON.stringify({ identity: config.email, path, researchSearch: !search.isError, contentBlocks: search.content?.length }));
     }
   }
-  console.log(JSON.stringify({ programmaticLogin: true, browserUsed: false, probes: ACCESS_PROBES.length * 2,
+  console.log(JSON.stringify({ programmaticLogin: true, browserUsed: false, probes: probes.length * 2,
     testAccount: config.email, permissions: permissions.size, failures }));
   if (failures.length) process.exitCode = 1;
 }

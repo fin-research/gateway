@@ -7,6 +7,7 @@ import { fixture } from './helpers/fixture.mjs';
 import { researchArguments } from '../src/mcp.ts';
 
 async function upstream(request, source, calls) {
+  assert.equal(request.redirect, 'manual');
   assert.equal(request.headers.has('Authorization'), false);
   assert.equal(request.headers.has('Cookie'), false);
   if (request.method !== 'POST') return new Response(null, { status: 405 });

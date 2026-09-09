@@ -78,7 +78,7 @@ export function parseLoginPage(html) {
   const links = [...html.matchAll(/<a\b([^>]*)>/gi)].map(([, tag]) => attributes(tag).href).filter(Boolean);
   return { forms, links };
 }
-async function boundedText(response) {
+export async function boundedText(response) {
   if (!response.body) return '';
   const reader = response.body.getReader(); const chunks = []; let size = 0;
   try {

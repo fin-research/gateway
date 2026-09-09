@@ -2,6 +2,7 @@ import { StreamableHTTPTransport } from '@hono/mcp';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker-provider.js';
 import { ListToolsRequestSchema, CallToolRequestSchema, ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
 import type { Context } from 'hono';
 import { authorizeData } from './lib/server/authorization.ts';
@@ -34,18 +35,22 @@ export function researchArguments(args: Record<string, unknown> = {}, now = Date
 
 async function withClient<T>(source: Source, env: Env, signal: AbortSignal, execute: (client: Client) => Promise<T>): Promise<T> {
   const url = new URL(source === 'data' ? '/data/mcp' : env.AI_SEARCH_MCP_URL, env.SITE_ORIGIN);
-  const client = new Client({ name: 'eastmoney-gateway', version: '1.0.0' });
+  const client = new Client({ name: 'eastmoney-gateway', version: '1.0.0' }, { jsonSchemaValidator: new CfWorkerJsonSchemaValidator() });
   const transport = new StreamableHTTPClientTransport(url, {
     fetch: async (input, init) => {
       const target = new URL(input instanceof Request ? input.url : String(input));
       if (target.origin !== url.origin || target.pathname !== url.pathname) throw new Error('Unexpected MCP upstream URL');
       // Never propagate user tokens/cookies to either upstream. Data trust comes
       // from GatewayData; AI Search receives only the MCP protocol headers.
-      const request = new Request(target, { ...init, signal: AbortSignal.any([signal, AbortSignal.timeout(60000)]), redirect: 'error' });
+      const request = new Request(target, { ...init, signal: AbortSignal.any([signal, AbortSignal.timeout(60000)]), redirect: 'manual' });
       if (source === 'search') request.headers.set('Origin', env.SITE_ORIGIN);
       const response = source === 'data'
         ? await env.DATA.fetch(forwardedRequest(request, { version: 1, user: null, choice: { status: 204 } }))
         : await fetch(request);
+      if (response.status >= 300 && response.status < 400) {
+        await response.body?.cancel();
+        throw new Error('MCP upstream redirect is not allowed');
+      }
       return response;
     },
   });

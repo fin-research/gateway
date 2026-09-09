@@ -18,6 +18,7 @@
     "auth0:apply": "node --use-env-proxy scripts/auth0-deploy.mjs apply"
   },
   "dependencies": {
+    "@cfworker/json-schema": "^4.1.1",
     "@hono/mcp": "0.3.2",
     "@modelcontextprotocol/sdk": "1.30.0",
     "graphql": "16.11.0",
