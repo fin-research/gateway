@@ -1,0 +1,57 @@
+{
+  "displayName": "东方财富证券 · 资金管理部",
+  "colors": {
+    "primary_button": "#2f6fd6",
+    "primary_button_label": "#ffffff",
+    "secondary_button_border": "#b8c7dc",
+    "secondary_button_label": "#172033",
+    "links_focused_components": "#2f6fd6",
+    "base_focus_color": "#2f6fd6",
+    "base_hover_color": "#245bb2",
+    "header": "#172033",
+    "body_text": "#273142",
+    "widget_background": "#ffffff",
+    "widget_border": "#d8e2f0",
+    "input_labels_placeholders": "#667085",
+    "input_filled_text": "#172033",
+    "input_border": "#b8c7dc",
+    "input_background": "#ffffff",
+    "icons": "#667085",
+    "error": "#d92d20",
+    "success": "#087a52"
+  },
+  "fonts": {
+    "font_url": "",
+    "reference_text_size": 16,
+    "links_style": "normal",
+    "title": { "size": 150, "bold": true },
+    "subtitle": { "size": 100, "bold": false },
+    "body_text": { "size": 100, "bold": false },
+    "buttons_text": { "size": 100, "bold": true },
+    "input_labels": { "size": 100, "bold": false },
+    "links": { "size": 100, "bold": false }
+  },
+  "borders": {
+    "button_border_weight": 1,
+    "buttons_style": "rounded",
+    "button_border_radius": 8,
+    "input_border_weight": 1,
+    "inputs_style": "rounded",
+    "input_border_radius": 8,
+    "widget_corner_radius": 10,
+    "widget_border_weight": 1,
+    "show_widget_shadow": false
+  },
+  "widget": {
+    "logo_position": "none",
+    "logo_url": "",
+    "logo_height": 48,
+    "header_text_alignment": "left",
+    "social_buttons_layout": "bottom"
+  },
+  "page_background": {
+    "background_color": "#f6f8fb",
+    "background_image_url": "",
+    "page_layout": "center"
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "name": "eastmoney signup profile",
+  "languages": {
+    "primary": "zh-CN",
+    "default": "zh-CN"
+  },
+  "start": {
+    "next_node": "profile"
+  },
+  "nodes": [
+    {
+      "id": "profile",
+      "type": "STEP",
+      "alias": "注册资料",
+      "config": {
+        "components": [
+          {
+            "id": "heading",
+            "category": "BLOCK",
+            "type": "RICH_TEXT",
+            "config": {
+              "content": "<h1>填写注册资料</h1>"
+            }
+          },
+          {
+            "id": "name",
+            "category": "FIELD",
+            "type": "TEXT",
+            "label": "姓名",
+            "required": true,
+            "config": {
+              "min_length": 1,
+              "max_length": 50,
+              "multiline": false
+            },
+            "sensitive": false
+          },
+          {
+            "id": "department",
+            "category": "FIELD",
+            "type": "TEXT",
+            "label": "部门",
+            "required": true,
+            "config": {
+              "min_length": 1,
+              "max_length": 100,
+              "multiline": false
+            },
+            "sensitive": false
+          },
+          {
+            "id": "continue",
+            "category": "BLOCK",
+            "type": "NEXT_BUTTON",
+            "config": {
+              "text": "保存并继续"
+            }
+          }
+        ],
+        "next_node": "$ending"
+      }
+    }
+  ],
+  "ending": {
+    "resume_flow": true
+  }
+}

@@ -1,0 +1,11 @@
+node_modules/
+.wrangler/
+dist/
+.env
+.env.*
+.dev.vars*
+!.dev.vars.example
+.auth0-deploy/
+.ops/
+*.log
+.DS_Store
