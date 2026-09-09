@@ -10,6 +10,11 @@ const origins = new Set([portal, team, auth, 'https://eastmoney.hasbai.xyz']);
 const cookies = new SessionCookies();
 const config = await readAuthTestConfig();
 let passwordSent = false;
+const reauthorizeData = process.argv.includes('--reauthorize-data');
+const checkCatalog = process.argv.includes('--check-catalog');
+let dataReauthorizationStarted = false;
+if (checkCatalog && !process.env.CLOUDFLARE_API_TOKEN) throw new Error('--check-catalog requires a Keychain-backed MCP Portals task token');
+if (process.argv.includes('--data-only') && (reauthorizeData || checkCatalog)) throw new Error('Portal verification options cannot be used with --data-only');
 
 function checked(value, base) {
   const url = new URL(value, base);
@@ -66,7 +71,22 @@ async function follow(start, stopOnServerCallback = false) {
           const result = await status.json(); if (Array.isArray(result.servers)) bootstrap.servers = result.servers;
         }
         console.log(JSON.stringify({ connectionResults: bootstrap.servers.map(server => ({ id: server.id, status: server.status, detail: String(server.errorDetail || server.error_detail || '').replace(/Bearer\s+\S+/gi, 'Bearer [redacted]').replace(/https?:\/\/[^\s?]+\?[^\s]*/g, '[URL query redacted]').slice(0, 400) })) }));
+        // A cached user grant can work while the manual-OAuth global catalog is
+        // still waiting after an earlier failed first connection. Reauthorize
+        // only the configured test user's Data grant to capture capabilities.
+        if (reauthorizeData && !dataReauthorizationStarted && bootstrap.servers.some(server => server.id === 'data' && server.status === 'connected')) {
+          const signOut = checked(bootstrap.signOutAction, url);
+          if (signOut.origin !== portal || signOut.pathname !== '/sign-out-server') throw new Error('Unexpected Data sign-out target');
+          signOut.searchParams.set('state', Buffer.from(JSON.stringify({ as: bootstrap.authSessionId, si: 'data' })).toString('base64url'));
+          const response = await fetch(signOut, { method: 'POST', headers: { Cookie: cookies.header(signOut), Origin: portal, Accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(30000) });
+          const result = await response.json();
+          if (!response.ok || result.server?.id !== 'data' || result.server.status !== 'needs_auth') throw new Error('Data reauthorization could not start');
+          bootstrap.servers = bootstrap.servers.map(server => server.id === 'data' ? result.server : server);
+          dataReauthorizationStarted = true;
+          console.log(JSON.stringify({ dataReauthorizationStarted: true, identity: config.email }));
+        }
         const needsAuth = bootstrap.servers?.find(server => server.id === 'data' && server.status === 'needs_auth' && (server.authorizeUrl || server.authorize_url));
+        if (needsAuth && reauthorizeData) dataReauthorizationStarted = true;
         if (needsAuth) { url = checked(needsAuth.authorizeUrl || needsAuth.authorize_url, url); method = 'GET'; body = undefined; continue; }
         if (['data', 'research'].every(id => bootstrap.servers.some(server => server.id === id && server.status === 'connected'))) {
           const values = new URLSearchParams(Object.entries(bootstrap.hiddenFields || {}).map(([name, value]) => [name, String(value)]));
@@ -172,6 +192,21 @@ try {
   const search = await rpc(portal + '/mcp', tokens.access_token, 'tools/call', { name: 'research_search', arguments: { query: '债券发行', ai_search_options: { retrieval: { max_num_results: 50, metadata_only: true, filters: { published_at: { $gte: start - 6 * day, $lte: start + day - 1 } } } } } }, 4, list.sessionId);
   if (search.result?.isError || !Array.isArray(search.result?.content) || !search.result.content.length) throw new Error('Managed research tool failed');
   console.log(JSON.stringify({ managedToolsVerified: true, dataHealth: healthData.status, researchSearch: true, browserUsed: false }));
+  if (checkCatalog) {
+    const response = await fetch('https://api.cloudflare.com/client/v4/accounts/5cecc63c78acf8f5473f8745f4244448/access/ai-controls/mcp/servers/data', {
+      headers: { Authorization: 'Bearer ' + process.env.CLOUDFLARE_API_TOKEN }, redirect: 'error', signal: AbortSignal.timeout(30000),
+    });
+    const value = await response.json();
+    if (!response.ok || value.success !== true) throw new Error('Cloudflare Data catalog read failed');
+    const server = value.result;
+    const catalog = server.tools?.map(tool => 'data_' + tool.name).sort() ?? [];
+    const live = names.filter(name => name.startsWith('data_')).sort();
+    const verified = server.status === 'ready' && server.authentication_status === 'manual'
+      && Boolean(server.last_successful_sync) && live.length > 0 && JSON.stringify(catalog) === JSON.stringify(live);
+    console.log(JSON.stringify({ catalogVerified: verified, status: server.status, authenticationStatus: server.authentication_status,
+      toolCount: catalog.length, lastSuccessfulSync: server.last_successful_sync }));
+    if (!verified) throw new Error('Cloudflare Data catalog is not Ready or differs from the live user catalog');
+  }
   }
 } catch (error) {
   console.error(JSON.stringify({ managedOAuth: false, browserUsed: false, message: error.message })); process.exitCode = 1;

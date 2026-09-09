@@ -65,6 +65,27 @@ Token 写入 `.env`、命令参数或临时文件。`mcp-portal-preflight.mjs` �
 - 短期账户 Token 可管理门户、Access、DNS 和 Gateway 发布。Data 手动发布曾因 VPC 权限返回 10196；修复经 Git 自动部署上线，最终以真实工具调用验收。
 - 生产 Data MCP 已观测到冷请求 CPU 超过 Free 10ms 的样本，不能标记为 Free CPU 安全；本地基准不能替代这一结论。
 
-管理 API 的 Data 记录本次仍显示 `authentication_status=manual`、`status=waiting` 和零全局缓存工具；
-逐用户会话已返回全部 23 个 Data 工具并成功执行。此处不把管理 API 状态写成 Ready，也不改用共享用户 JWT 充当管理员凭据。
-研究库管理 API 为 Ready。此差异已在真实授权会话内核验，不影响本次工具调用结果。
+### 首次连接状态恢复
+
+初次配置时 Data 用户授权遇到协议错误；修复后已有授权会话可以列出和调用工具，但管理 API
+仍为 `authentication_status=manual`、`status=waiting`、零工具且无成功同步时间。
+普通重连复用已有授权，未补齐首次工具同步；`POST .../servers/data/sync` 对 manual OAuth
+返回 `success=false`、`status=waiting`。此模式应重新完成上游用户授权，不能套用自动 OAuth 的管理员凭据同步流程。
+
+2026-09-09 15:51:37 UTC，程序化退出 `test@18.cn` 的 Data 上游授权并重新授权后，管理 API
+已回读 `status=ready`、23 个工具和成功同步时间；统一门户仍返回 27 个工具，`data_health`
+与 `research_search` 实际调用成功。Data 保留逐用户 OAuth，门户 `on_behalf=true`，未写入共享用户 JWT。
+
+恢复命令（仅重建测试账号的 Data 授权）：
+
+```sh
+NO_PROXY=mcp.hasbai.xyz node --use-env-proxy scripts/verify-managed-mcp.mjs --reauthorize-data --check-catalog
+```
+
+通过 `cloudflare-task-session.py` 的 `run` 子进程执行上述 Node 命令，并以 `env` 设置 `NO_PROXY`。
+`--check-catalog` 使用派生 Token 的 `MCP Portals Read` 或 `Write` 权限，只读核对后台 Ready、
+成功同步时间及目录与当前用户工具是否一致；平时可单独使用该选项，省略 `--reauthorize-data`。
+密码、Cookie、OAuth code 和 Token 仅在进程内存中处理。不要退出其他用户、关闭 Require user auth，
+或把用户 JWT 写成共享管理员凭据来消除 Waiting。
+
+依据：[manual OAuth 首次授权与同步限制](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/#configure-manual-oauth-credentials)。
