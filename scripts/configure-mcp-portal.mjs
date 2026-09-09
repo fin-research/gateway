@@ -1,6 +1,8 @@
 // Run through cloudflare-task-session.py; task credential comes only from its
 // child environment. Auth0's MCP client secret remains in memory throughout.
 import { management } from './lib/auth0-management.mjs';
+import { addChatGptRedirectUris } from './lib/mcp-client-redirects.mjs';
+import { isDeepStrictEqual } from 'node:util';
 const account = '5cecc63c78acf8f5473f8745f4244448';
 const zone = 'e0665efd9fd68d06cbb9ab68a13cc7c6';
 const clientId = 'M1a5PF3UJaFIZv1k4HO4IV06Z5fXQBHV';
@@ -16,6 +18,18 @@ async function api(path, method = 'GET', body) {
   return value.result ?? value;
 }
 const prefix = `accounts/${account}/access`;
+async function configureClientRedirects(id) {
+  const app = await api(prefix + '/apps/' + id);
+  if (app.type !== 'mcp_portal' || app.domain !== 'mcp.hasbai.xyz') throw new Error('Expected the Eastmoney MCP portal application');
+  const oauth = addChatGptRedirectUris(app.oauth_configuration);
+  if (!isDeepStrictEqual(oauth, app.oauth_configuration)) {
+    // Cloudflare requires preserving the complete existing application on PUT.
+    await api(prefix + '/apps/' + id, 'PUT', { ...app, oauth_configuration: oauth });
+  }
+  const confirmed = await api(prefix + '/apps/' + id);
+  if (!isDeepStrictEqual(confirmed.oauth_configuration, oauth)) throw new Error('Portal OAuth configuration readback mismatch');
+  console.log(JSON.stringify({ portalApplicationId: id, allowedRedirectUris: oauth.dynamic_client_registration.allowed_uris }));
+}
 const mode = process.argv[2];
 if (mode === 'upstreams') {
   const client = management('get', `clients/${clientId}?fields=client_id,client_secret,name&include_fields=true`);
@@ -52,7 +66,8 @@ if (mode === 'upstreams') {
   }
   let portalApp = apps.find(value => value.domain === 'mcp.hasbai.xyz');
   if (!portalApp) portalApp = await api(prefix + '/apps', 'POST', { ...config, name: 'Eastmoney MCP Portal', type: 'mcp_portal', domain: 'mcp.hasbai.xyz',
-    destinations: [{ type: 'public', uri: 'mcp.hasbai.xyz' }], oauth_configuration: { enabled: true, dynamic_client_registration: { enabled: true, allow_any_on_localhost: true, allow_any_on_loopback: true }, grant: { access_token_lifetime: '15m', session_duration: '336h' } } });
+    destinations: [{ type: 'public', uri: 'mcp.hasbai.xyz' }], oauth_configuration: addChatGptRedirectUris({ enabled: true, dynamic_client_registration: { enabled: true, allow_any_on_localhost: true, allow_any_on_loopback: true }, grant: { access_token_lifetime: '15m', session_duration: '336h' } }) });
+  await configureClientRedirects(portalApp.id);
   const portal = await api(prefix + '/ai-controls/mcp/portals/eastmoney');
   await api(prefix + '/ai-controls/mcp/portals/eastmoney', 'PUT', { name: portal.name, hostname: portal.hostname, description: portal.description, code_mode: 'off', secure_web_gateway: false,
     servers: [{ server_id: 'data', on_behalf: true, default_disabled: false }, { server_id: 'research', on_behalf: false, default_disabled: false }] });
@@ -60,4 +75,8 @@ if (mode === 'upstreams') {
   if (records.length && !records.every(record => record.type === 'CNAME' && record.content === 'gateway.agents.cloudflare.com' && record.proxied)) throw new Error('Conflicting portal DNS; inspect before changing');
   if (!records.length) await api(`zones/${zone}/dns_records`, 'POST', { type: 'CNAME', name: 'mcp.hasbai.xyz', content: 'gateway.agents.cloudflare.com', proxied: true, ttl: 1 });
   console.log(JSON.stringify({ portalApplicationId: portalApp.id, endpoint: origin + '/mcp', dataOnBehalf: true, dnsReady: true }));
-} else throw new Error('Expected upstreams or applications');
+} else if (mode === 'client-redirects') {
+  const app = (await api(prefix + '/apps')).find(value => value.domain === 'mcp.hasbai.xyz');
+  if (!app) throw new Error('MCP portal application missing');
+  await configureClientRedirects(app.id);
+} else throw new Error('Expected upstreams, applications, or client-redirects');

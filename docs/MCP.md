@@ -20,7 +20,10 @@ Gateway 仅在 `/data/mcp` 接受此客户端的 API JWT，不扩大到 Dashboar
 门户配置独立 IdP `Eastmoney MCP Auth0`。Data、research 各有 `mcp` 类型 Access 应用，
 通过 `via_mcp_server_portal` destination 约束门户内的工具访问，不在 Data 公网路径外再加 Access。
 门户使用 `mcp_portal` 应用及 managed OAuth；动态客户端注册支持 localhost/loopback 回调，
-Access token 15 分钟、grant session 14 天。其他远端客户端需登记精确 HTTPS 回调。
+Access token 15 分钟、grant session 14 天。ChatGPT 允许官方固定回调
+`https://chatgpt.com/connector_platform_oauth_redirect` 和按连接器分配的
+`https://chatgpt.com/connector/oauth/*`；通配仅限这个专用 OAuth 路径。
+其他远端客户端需登记精确 HTTPS 回调。
 
 Data 上游的 manual OAuth 配置通过 authorization endpoint 的 audience 参数请求本站 API token，
 并使用 `openid profile email offline_access`。API 允许 offline access，门户客户端使用有期限的 refresh token；
@@ -33,6 +36,7 @@ Code Mode 当前关闭。工具定义和执行由 Cloudflare 转发；研究查�
 
 - `scripts/configure-mcp-portal.mjs upstreams` 创建独立 IdP 与 Data manual OAuth 上游。
 - `scripts/configure-mcp-portal.mjs applications` 建立门户及上游 Access 策略、映射和 DNS。
+- `scripts/configure-mcp-portal.mjs client-redirects` 为已有门户补齐 ChatGPT DCR 回调白名单，保留完整应用配置、原白名单和登录策略。
 - DNS 为 proxied CNAME `mcp.hasbai.xyz` → `gateway.agents.cloudflare.com`。
 - Auth0 配置经显式资源 Deploy CLI export/plan/apply；数据库连接仅追加门户客户端，保留已有客户端。
 - Auth0 Action 发布只 patch code，保留 Secret、依赖和绑定；MCP client ID 与 Wrangler 配置同步。
@@ -47,6 +51,20 @@ Token 写入 `.env`、命令参数或临时文件。`mcp-portal-preflight.mjs` �
 `pnpm check`、`pnpm deploy:dry`、Gateway 联调和真实账号 HTTP 验证覆盖旧入口退役、Data 用户
 和机器边界。Cloudflare 门户需要单独验证 managed OAuth、上游用户授权和工具发现/调用。
 没有执行的交互层、浏览器或生产 CPU 检查不能由配置成功替代。
+
+ChatGPT 创建连接器报 `invalid_client_metadata: redirect_uri is not allowed by the account configuration`
+表示 Cloudflare managed OAuth 的 DCR 回调白名单不包含 ChatGPT。通过 Keychain 派生 Token
+（`Access: Apps and Policies Write`）运行 `client-redirects`，随后执行
+`node --use-env-proxy scripts/verify-mcp-registration.mjs` 验证官方两类回调注册成功，
+陌生域名、ChatGPT 非回调路径和相似前缀被拒绝。此操作更新门户 Access 应用的
+`oauth_configuration.dynamic_client_registration.allowed_uris`，不修改 Auth0 上游回调。
+HTTP 注册检查不等同于 ChatGPT 界面内完整连接验收。
+
+2026-09-10 实测两类 ChatGPT 回调在修复前均复现上述 400；补齐白名单后均返回 201。
+四项越界回调探针继续返回 400，原 18.cn/指定 IdP 策略和 15 分钟/14 天授权期限回读一致。
+
+官方回调规范：[OpenAI Authentication](https://developers.openai.com/plugins/build/auth#redirect-url)；
+白名单配置：[Cloudflare Managed OAuth](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/#managed-oauth-settings)。
 
 官方依据：[MCP Portals](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/)、
 [Managed OAuth](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/)、
