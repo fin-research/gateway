@@ -57,3 +57,7 @@ Worker Secret：`AUTH0_CLIENT_SECRET`、`AUTH0_MANAGEMENT_CLIENT_SECRET`、`SESS
 ## 发布与证据
 
 只提交本次文件，推送并核对远端。Gateway 手动部署已获重构任务授权；Dashboard 默认 Git 自动部署，必要手动部署也已授权；Data 按其开发文档部署，Quant 仅提交客户端，无部署。发布后必须核对配置和请求，不能把本地通过当作线上成功。
+
+## MCP 与错误语义
+
+`src/mcp.ts` 聚合 Data 和 research MCP；端点、Cloudflare 托管门户目标和配置阻断见 [MCP](MCP.md)。`pnpm auth:verify` 含真实 MCP 初始化、工具目录、只读调用和输入错误探针。匿名保护请求先返回 401；已登录的未登记入口返回 403 `ROUTE_NOT_REGISTERED`，账号拒绝仍为 `ACCESS_DENIED`。

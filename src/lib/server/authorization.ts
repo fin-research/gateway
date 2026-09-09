@@ -31,9 +31,18 @@ function identityFromPayload(payload: JWTPayload, env: Env): SiteIdentity {
 
 /** Identity, current account state, current roles and permissions share one request lifetime. */
 export async function authorizeRequest(request: Request, env: Env, routeId: string | null, fetcher: typeof fetch = fetch) {
-  const policy = requestPolicy(request, routeId);
-  requireSameOrigin(request);
-  if (policy.public && routeId !== '/auth/session') return { user: null, permissions: [] as string[], directory: undefined };
+  let policy;
+  try { policy = requestPolicy(request, routeId); }
+  catch (error) {
+    // Missing/invalid authentication must not be reported as missing route
+    // permission. Authenticated callers still receive the explicit registry error.
+    if (error instanceof AccessError && error.code === 'ROUTE_NOT_REGISTERED') await userIdentity(request, env);
+    throw error;
+  }
+  if (policy.public && routeId !== '/auth/session') {
+    requireSameOrigin(request);
+    return { user: null, permissions: [] as string[], directory: undefined };
+  }
   let user: SiteIdentity | null;
   try { user = await userIdentity(request, env, policy.public); }
   catch (error) {
@@ -41,6 +50,7 @@ export async function authorizeRequest(request: Request, env: Env, routeId: stri
     throw error;
   }
   if (!user) return { user: null, permissions: [] as string[], directory: undefined };
+  requireSameOrigin(request);
   const mode = authorizationMode(env.AUTHORIZATION_MODE);
   const directory = createDirectory(env, fetcher);
   const profile = await directory.current(user);

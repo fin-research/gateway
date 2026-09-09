@@ -42,14 +42,14 @@ export async function dataRequest(request: Request, env: Env): Promise<Response>
       try { needsIdentity = typeof input.query === 'string' && hasChoiceField(input.query, typeof input.operationName === 'string' ? input.operationName : undefined); }
       catch { /* malformed query is rejected by Data; Choice remains denied */ }
       if (needsIdentity) {
-        try { if (!request.headers.has('Authorization')) requireSameOrigin(request); await authorizeData(request, env); context.choice.status = 204; }
+        try { await authorizeData(request, env); if (!request.headers.has('Authorization')) requireSameOrigin(request); context.choice.status = 204; }
         catch (error) { context.choice.status = error instanceof AccessError ? error.status : 503; }
       }
     }
     return env.DATA.fetch(forwardedRequest(request, context));
   }
-  if (!request.headers.has('Authorization')) requireSameOrigin(request);
   await authorizeData(request, env);
+  if (!request.headers.has('Authorization')) requireSameOrigin(request);
   context.choice.status = 204;
   return env.DATA.fetch(forwardedRequest(request, context));
 }

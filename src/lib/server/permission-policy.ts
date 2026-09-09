@@ -32,7 +32,7 @@ export function requestPolicy(request: Request, routeId: string | null): Policy 
     if (method === 'GET') value = pagePermission(url.pathname, routeId);
     if (routeId === '/financing/data/api/[...path]' && path.endsWith('/rpc/liability_weekly_report_data') && method === 'POST') value = 'financing.report:read';
   }
-  if (!value) throw new AccessError(403, '该入口或操作尚未登记权限');
+  if (!value) throw new AccessError(403, '该入口或操作未登记路由权限；这不表示当前账号缺少权限', 'ROUTE_NOT_REGISTERED');
   if (value === 'public') return { public: true };
   if (value === 'login') return { login: true };
   return { permission: value };

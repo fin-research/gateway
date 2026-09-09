@@ -9,6 +9,7 @@ import { profileRequest } from './identity-service.ts';
 import { publicSession } from './lib/identity.ts';
 import { Hono } from 'hono';
 import { ProfileError } from './lib/server/profile.ts';
+import { unifiedMcp } from './mcp.ts';
 
 export const app = new Hono<{ Bindings: Env }>({ strict: false });
 app.use('*', async (c, next) => {
@@ -22,6 +23,7 @@ app.use('*', async (c, next) => {
 });
 app.on('GET', ['/auth/login', '/financing/login'], c => login(c.req.raw, c.env));
 app.get('/auth/callback', c => callback(c.req.raw, c.env));
+app.all('/mcp', unifiedMcp);
 app.on(['GET', 'POST'], ['/auth/logout', '/financing/logout'], c => { requireSameOrigin(c.req.raw); return logout(c.env); });
 app.all('*', async c => {
     const request = c.req.raw, env = c.env;
@@ -44,6 +46,7 @@ app.onError((error, c) => {
     const request = c.req.raw;
     if (error instanceof ProfileError) return Response.json({ detail: error.message }, { status: error.status, headers: { 'Cache-Control': 'no-store' } });
     if (error instanceof AccessError && error.status === 401 && request.method === 'GET'
+      && !/^\/(?:api(?:\/|$)|data(?:\/|$)|mcp(?:\/|$))/.test(new URL(request.url).pathname)
       && (request.headers.get('Accept')?.includes('text/html') || new URL(request.url).pathname.endsWith('/__data.json'))) {
       const url = new URL(request.url);
       const path = url.pathname.replace(/\/__data\.json$/, '');

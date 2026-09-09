@@ -18,8 +18,11 @@
     "auth0:apply": "node --use-env-proxy scripts/auth0-deploy.mjs apply"
   },
   "dependencies": {
+    "@hono/mcp": "0.3.2",
+    "@modelcontextprotocol/sdk": "1.30.0",
     "graphql": "16.11.0",
     "hono": "4.13.5",
+    "hono-rate-limiter": "0.5.3",
     "jose": "^6.2.12",
     "pg": "^8.23.0",
     "zod": "4.4.3"
