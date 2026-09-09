@@ -32,8 +32,8 @@
 ## 切换版本与提交
 
 - Gateway 首轮生产版本：`f79b53e1-de4a-43e0-9bf2-db379153aa4a`。
-- Dashboard 首轮私有入口版本：`a03ad712-0a31-49ef-ae13-14612f5910b6`；随后通过 Git 构建并删除旧 Secret，核对到版本 `c0f6cddd-911d-42d9-afb6-c73183bc0b4b`。
-- Data 首轮私有入口版本：`601ed222-1ffa-43a7-b8b8-434d361ccafb`；随后 Git 构建部署核对到版本 `50260df3-284e-4623-af7c-a845bec70f48`。
+- Dashboard 首轮私有入口版本：`a03ad712-0a31-49ef-ae13-14612f5910b6`；随后删除旧 Secret，核对到版本 `c0f6cddd-911d-42d9-afb6-c73183bc0b4b`。
+- Data 首轮私有入口版本：`601ed222-1ffa-43a7-b8b8-434d361ccafb`；后续生产回读核对到版本 `50260df3-284e-4623-af7c-a845bec70f48`。
 - 代码提交：Gateway `3e02f17`，Dashboard `8a61ef9`，Data `eeaeed3`，Quant `86abbd6`；后续文档和运维脚本整理单独提交。四个仓库均已推送 main，项目组共享文档另在非 Git 根目录更新。
 
 生产版本会随后续 Git 构建变化，以上是本次有回读证据的版本，不代表永久固定版本。
