@@ -51,3 +51,20 @@ Token 写入 `.env`、命令参数或临时文件。`mcp-portal-preflight.mjs` �
 官方依据：[MCP Portals](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/)、
 [Managed OAuth](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/)、
 [账户 Token 签发](https://developers.cloudflare.com/fundamentals/api/how-to/create-via-api/)。
+
+## 2026-09-09 实际验收
+
+- 门户服务器身份为 `cloudflare-mcp-portal`；匿名 `/mcp` 返回 401 和标准 OAuth metadata。
+- `test@18.cn` 通过真实 Auth0 登录、Cloudflare managed OAuth PKCE 和 Data 逐用户授权。
+- 门户列出 27 个工具：23 个 `data_*`、`research_search` 和 3 个 Cloudflare 管理工具。
+- 经门户调用 `data_health` 返回 `ok`，`research_search` 在日期硬过滤和 50 条上限下返回成功。
+- `scripts/verify-managed-mcp.mjs` 可复现以上流程；只使用程序化 HTTP，不执行浏览器。客户端公有 ID 可以在 `.ops` 缓存，Cookie、code、JWT、Secret 仅驻留进程内存。
+- 本机代理曾对新域名产生 TLS 连接失败；直接连接已验证正常。必要时仅对子进程设置 `NO_PROXY=mcp.hasbai.xyz`，不改门户配置绕过认证。
+- Data 69 项、Gateway 44 项检查和真实后端处理器 32 项联调通过。自建聚合代码及依赖已移除，旧站点 `/mcp` 返回 410 和新地址。
+- Cloudflare 先发送 `server/discover` / `2026-07-28`；当前 Hono MCP 返回 404 协商旧协议。Data 现保留该协议响应，不再误转换为 503，门户可回退并正常连接。
+- 短期账户 Token 可管理门户、Access、DNS 和 Gateway 发布。Data 手动发布曾因 VPC 权限返回 10196；修复经 Git 自动部署上线，最终以真实工具调用验收。
+- 生产 Data MCP 已观测到冷请求 CPU 超过 Free 10ms 的样本，不能标记为 Free CPU 安全；本地基准不能替代这一结论。
+
+管理 API 的 Data 记录本次仍显示 `authentication_status=manual`、`status=waiting` 和零全局缓存工具；
+逐用户会话已返回全部 23 个 Data 工具并成功执行。此处不把管理 API 状态写成 Ready，也不改用共享用户 JWT 充当管理员凭据。
+研究库管理 API 为 Ready。此差异已在真实授权会话内核验，不影响本次工具调用结果。
