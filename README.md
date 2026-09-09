@@ -11,3 +11,5 @@ Dashboard / Ingest → InternalData → Data
 Dashboard/Data 不公开 origin，也不验证 JWT。Gateway 的权限准入与应用的记录归属、业务状态、输入校验、RLS、材料保密检查共同构成完整边界。
 
 开始开发阅读 [AGENTS](AGENTS.md)；配置、测试及跨仓库切换见 [DEVELOPMENT](docs/DEVELOPMENT.md)，完整权限范围见项目组 [AUTH](../eastmoney/docs/AUTH.md)。
+
+本次切换与测试证据见 [VALIDATION](docs/VALIDATION.md)。
