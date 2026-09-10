@@ -26,6 +26,7 @@ export const ACCESS_PROBES = [
   ['financing.sop:read', '/financing/sop', [200]],
   ['financing.reminder:read', '/financing/sop/reminders', [200]],
   ['financing.data:read', '/financing/data', [200]],
+  ['financing.data:read', '/financing/bond-investors', [200]],
   ['financing.report:read', '/financing/liability-report', [200]],
   ['account.profile:read', '/api/profile', [200]],
   ['auth.permission:read', '/management/people', [200]],

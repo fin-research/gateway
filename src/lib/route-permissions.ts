@@ -43,6 +43,7 @@ export const ROUTE_PERMISSIONS: Record<string, Methods> = {
   '/management/people': { GET: 'auth.permission:read', 'POST:saveRolePermissions': 'auth.permission:update' },
   '/management/financing-profile': { GET: 'account.profile:read' },
   '/financing': { GET: 'financing.overview:read' },
+  '/financing/bond-investors': { GET: 'financing.data:read' },
   '/financing/login': { GET: 'login' }, '/financing/logout': { GET: 'login', 'POST:default': 'login' },
   '/financing/people': { GET: 'auth.permission:read' }, '/financing/settings': { GET: 'account.profile:read' },
   '/financing/avatar': { GET: 'account.profile:read' },
