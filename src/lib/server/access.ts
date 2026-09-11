@@ -1,3 +1,5 @@
+import { Auth0Error } from './auth0-management.js';
+
 /** Shared error shape; no Cloudflare Access credentials are accepted. */
 export class AccessError extends Error {
   readonly status: 401 | 403 | 503;
@@ -6,7 +8,10 @@ export class AccessError extends Error {
 }
 
 export function accessFailure(error: unknown): Response {
-  const failure = error instanceof AccessError ? error : new AccessError(503, '身份服务暂时不可用');
+  const failure = error instanceof AccessError ? error
+    : error instanceof Auth0Error && error.code === 'AUTH0_RATE_LIMITED'
+      ? new AccessError(503, error.message, 'IDENTITY_RATE_LIMITED')
+      : new AccessError(503, '身份服务暂时不可用');
   return Response.json({ detail: failure.message, code: failure.code, loginUrl: '/auth/login' }, {
     status: failure.status, headers: { 'Cache-Control': 'no-store, private', Vary: 'Cookie, Authorization', ...(failure.status === 401 ? { 'WWW-Authenticate': 'Bearer realm="eastmoney"' } : {}) },
   });

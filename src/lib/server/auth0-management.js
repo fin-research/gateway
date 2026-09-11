@@ -17,9 +17,10 @@ export function auth0ProfileCanLogin(user) {
   return /^[^@\s]+@18\.cn$/.test(email) && !user?.blocked && (user?.email_verified === true || migrated);
 }
 
-/** @param {{ domain: string, clientId: string, clientSecret: string, fetchImpl?: typeof fetch }} config */
+/** @param {{ domain: string, clientId: string, clientSecret: string, fetchImpl?: typeof fetch, waitImpl?: (milliseconds: number) => Promise<void> }} config */
 export function createAuth0ManagementClient(config) {
   const fetcher = config.fetchImpl ?? fetch;
+  const wait = config.waitImpl ?? ((milliseconds) => new Promise(resolve => setTimeout(resolve, milliseconds)));
   if (!/^[a-z0-9.-]+\.auth0\.com$/.test(config.domain) || !config.clientId || !config.clientSecret) {
     throw new Auth0Error(503, 'Auth0 管理服务未配置', 'AUTH0_UNAVAILABLE');
   }
@@ -31,15 +32,37 @@ export function createAuth0ManagementClient(config) {
   /** @param {string} url @param {RequestInit} init */
   async function send(url, init) {
     let response;
-    // workerd supports manual/follow only. Reject 3xx here without forwarding credentials.
-    try { response = await fetcher(url, { ...init, redirect: 'manual', signal: AbortSignal.timeout(10000) }); }
-    catch {
-      console.warn(JSON.stringify({ event: 'auth0_request_failed', phase: url.includes('/oauth/token') ? 'token' : 'management', reason: 'network' }));
-      throw new Auth0Error(503, 'Auth0 暂时不可用', 'AUTH0_UNAVAILABLE');
+    const phase = url.includes('/oauth/token') ? 'token' : 'management';
+    // A 429 rejects the operation. Retry reads and token acquisition only;
+    // never replay profile/role mutations or reuse a stale authorization result.
+    const retryable = phase === 'token' || !init.method || init.method === 'GET';
+    let waited = 0;
+    for (let attempt = 0; ; attempt++) {
+      // workerd supports manual/follow only. Reject 3xx without forwarding credentials.
+      try { response = await fetcher(url, { ...init, redirect: 'manual', signal: AbortSignal.timeout(10000) }); }
+      catch {
+        console.warn(JSON.stringify({ event: 'auth0_request_failed', phase, reason: 'network' }));
+        throw new Auth0Error(503, 'Auth0 暂时不可用', 'AUTH0_UNAVAILABLE');
+      }
+      if (response.status !== 429 || !retryable || attempt >= 4) break;
+      const retryAfter = response.headers.get('retry-after');
+      const reset = response.headers.get('x-ratelimit-reset');
+      const serverDelay = retryAfter != null
+        ? (/^\d+(?:\.\d+)?$/.test(retryAfter) ? Number(retryAfter) * 1000 : Date.parse(retryAfter) - Date.now())
+        : reset != null ? Number(reset) * 1000 - Date.now() : 0;
+      const delay = Math.max(500 * 2 ** attempt, Number.isFinite(serverDelay) ? serverDelay : 0)
+        + 100 + Math.floor(Math.random() * 150);
+      if (waited + delay > 10000) break;
+      await response.body?.cancel();
+      console.warn(JSON.stringify({ event: 'auth0_rate_limit_retry', phase, attempt: attempt + 1, delayMs: delay }));
+      await wait(delay);
+      waited += delay;
     }
     if (response.status === 401) serviceTokens.delete(cacheKey);
     if (!response.ok) {
       console.warn(JSON.stringify({ event: 'auth0_request_failed', phase: url.includes('/oauth/token') ? 'token' : 'management', status: response.status }));
+      await response.body?.cancel();
+      if (response.status === 429) throw new Auth0Error(503, '身份服务请求繁忙，请稍后重试', 'AUTH0_RATE_LIMITED');
       throw new Auth0Error(response.status < 400 || response.status >= 500 || [401, 403, 429].includes(response.status) ? 503 : response.status, 'Auth0 操作失败', 'AUTH0_REQUEST_FAILED');
     }
     if (response.status === 204) return null;
