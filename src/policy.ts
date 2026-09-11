@@ -1,3 +1,4 @@
+import { matchDashboardRoute } from './lib/route-permissions.ts';
 import { ROUTE_PERMISSIONS, requestPolicy } from './lib/server/permission-policy.ts';
 import { AccessError } from './lib/server/access.ts';
 
@@ -11,19 +12,8 @@ export function canonicalPath(request: Request): string {
   return decoded.replace(/\/__data\.json$/, '').replace(/\/$/, '') || '/';
 }
 
-const routes = Object.keys(ROUTE_PERMISSIONS).map(id => {
-  const pattern = id.split('/').map(segment => {
-    if (/^\[\[.+\]\]$/.test(segment)) return '(?:/[^/]+)?';
-    if (/^\[\.\.\..+\]$/.test(segment)) return '/.+';
-    if (segment === '') return '';
-    return '/' + segment.split(/(\[[^\]]+\])/).map(part => /^\[/.test(part) ? '[^/]+' : part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('');
-  }).join('');
-  return { id, pattern: new RegExp('^' + (pattern || '/') + '$'), dynamic: (id.match(/\[/g) ?? []).length };
-}).sort((a, b) => a.dynamic - b.dynamic || b.id.length - a.id.length);
-
 export function dashboardRoute(request: Request): string | null {
-  const path = canonicalPath(request);
-  return routes.find(route => route.pattern.test(path))?.id ?? null;
+  return matchDashboardRoute(canonicalPath(request));
 }
 export function dashboardPolicy(request: Request) { return requestPolicy(request, dashboardRoute(request)); }
 

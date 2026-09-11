@@ -74,3 +74,57 @@ test('tampered/duplicate cookies never create identity; public session, logout a
   assert.ok(logout.headers.getSetCookie().some(value => value.startsWith(SESSION_COOKIE + '=;')));
   assert.equal((await gatewayRequest(f.request('/auth/logout', { method: 'POST', headers: { Origin: 'https://evil.test' } }), f.env)).status, 403);
 });
+
+test('session lifetime is capped at 24h and never outlives its verified access token', async t => {
+  const f = await fixture(t);
+  const { jwtDecrypt, base64url } = await import('jose');
+  for (const lifetime of [120, 86400, 172800]) {
+    const start = await gatewayRequest(f.request('/auth/login'), f.env);
+    const auth = new URL(start.headers.get('Location'));
+    const expiration = Math.floor(Date.now() / 1000) + lifetime;
+    f.intercept(async url => {
+      if (url.pathname !== '/oauth/token') return;
+      return Response.json({ token_type: 'Bearer', access_token: await f.signed({ exp: expiration }),
+        id_token: await f.signed({ email: 'test@18.cn', nonce: auth.searchParams.get('nonce') }, 'id') });
+    });
+    const result = await gatewayRequest(f.request('/auth/callback?code=unit&state=' + auth.searchParams.get('state'), { headers: { Cookie: jarCookie(start, '__Host-eastmoney_login') } }), f.env);
+    assert.equal(result.status, 303);
+    const cookie = result.headers.getSetCookie().find(value => value.startsWith(SESSION_COOKIE + '='));
+    const age = Number(/Max-Age=(\d+)/.exec(cookie)[1]);
+    assert.ok(age <= Math.min(lifetime, 86400) && age >= Math.min(lifetime, 86400) - 3);
+    const token = jarCookie(result, SESSION_COOKIE).slice(SESSION_COOKIE.length + 1);
+    const { payload } = await jwtDecrypt(token, base64url.decode(f.env.SESSION_SECRET));
+    assert.ok(payload.exp <= expiration); assert.ok(payload.exp - payload.iat <= 86400);
+  }
+});
+
+test('popup completion is transaction-bound and only sends an origin-scoped success hint', async t => {
+  const f = await fixture(t);
+  const { runInNewContext } = await import('node:vm');
+  const id = 'a'.repeat(32);
+  for (const ok of [true, false]) {
+    const start = await gatewayRequest(f.request('/auth/login?popup=' + id + '&returnTo=%2Fprofile'), f.env);
+    const auth = new URL(start.headers.get('Location'));
+    f.intercept(async url => {
+      if (url.pathname !== '/oauth/token') return;
+      return Response.json({ token_type: 'Bearer', access_token: await f.signed(), id_token: await f.signed({ email: 'test@18.cn', nonce: auth.searchParams.get('nonce') }, 'id') });
+    });
+    const result = await gatewayRequest(f.request('/auth/callback?state=' + auth.searchParams.get('state') + (ok ? '&code=unit-code' : '&error=access_denied'), { headers: { Cookie: jarCookie(start, '__Host-eastmoney_login') } }), f.env);
+    assert.equal(result.status, 200); assert.equal(result.headers.get('location'), null);
+    assert.match(result.headers.get('Content-Security-Policy'), /default-src 'none'.*script-src 'nonce-/);
+    const html = await result.text();
+    assert.ok(!html.includes('unit-code')); assert.ok(!html.includes(auth.searchParams.get('state')));
+    const events = [];
+    runInNewContext(/<script nonce="[^"]+">([\s\S]+)<\/script>/.exec(html)[1], {
+      history: { replaceState: (_state, _title, path) => events.push(['history', path]) },
+      window: { opener: { postMessage: (data, origin) => events.push(['message', JSON.parse(JSON.stringify(data)), origin]) }, close: () => events.push(['close']) },
+      BroadcastChannel: class { constructor(name) { events.push(['channel', name]); } postMessage() {} close() {} },
+    });
+    assert.deepEqual(events[0], ['history', '/auth/callback']);
+    assert.deepEqual(events[1], ['message', { type: 'eastmoney:login', id, ok }, f.env.SITE_ORIGIN]);
+    assert.equal(events.some(event => event[0] === 'close'), ok);
+    assert.equal(result.headers.getSetCookie().some(value => value.startsWith(SESSION_COOKIE + '=')), ok);
+  }
+  const plain = await gatewayRequest(f.request('/auth/callback?popup=' + id + '&code=unit&state=forged'), f.env);
+  assert.equal(plain.status, 401); assert.match(plain.headers.get('Content-Type'), /json/);
+});

@@ -79,3 +79,36 @@ export function pagePermission(pathname: string, routeId: string | null): Method
   }
   return ROUTE_PERMISSIONS[routeId ?? '']?.GET;
 }
+
+const routes = Object.keys(ROUTE_PERMISSIONS).map(id => {
+  const pattern = id.split('/').map(segment => {
+    if (/^\[\[.+\]\]$/.test(segment)) return '(?:/[^/]+)?';
+    if (/^\[\.\.\..+\]$/.test(segment)) return '/.+';
+    if (segment === '') return '';
+    return '/' + segment.split(/(\[[^\]]+\])/).map(part => /^\[/.test(part) ? '[^/]+' : part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('');
+  }).join('');
+  return { id, pattern: new RegExp('^' + (pattern || '/') + '$'), dynamic: (id.match(/\[/g) ?? []).length };
+}).sort((a, b) => a.dynamic - b.dynamic || b.id.length - a.id.length);
+
+/** Path is canonicalized by the Gateway before this matching step. */
+export function matchDashboardRoute(path: string): string | null {
+  return routes.find(route => route.pattern.test(path))?.id ?? null;
+}
+
+/** Presentation-only preflight; the Gateway still authorizes every request. */
+export function clientRequestPermission(url: URL, method: string): Methods[string] {
+  if (/%(?:2f|5c|00|25)/i.test(url.pathname)) return undefined;
+  let path: string;
+  try { path = decodeURIComponent(url.pathname).replace(/\/__data\.json$/, '').replace(/\/$/, '') || '/'; }
+  catch { return undefined; }
+  if (/[\\\x00-\x1f\x7f?#]/.test(path) || path.includes('//')) return undefined;
+  const id = matchDashboardRoute(path);
+  method = method.toUpperCase();
+  if (method === 'HEAD' || method === 'GET') return pagePermission(path, id);
+  const names = [...url.searchParams.keys()].filter(name => name.startsWith('/'));
+  if (method === 'POST' && (names.length > 1 || (names[0] && !/^\/[A-Za-z][A-Za-z0-9]*$/.test(names[0])))) return undefined;
+  const named = method === 'POST' ? names[0]?.slice(1) ?? 'default' : 'default';
+  if (id === '/financing/data/api/[...path]' && path.endsWith('/rpc/liability_weekly_report_data') && method === 'POST') return 'financing.report:read';
+  const methods = ROUTE_PERMISSIONS[id ?? ''];
+  return methods?.[`${method}:${named}`] ?? (named === 'default' ? methods?.[method] : undefined);
+}

@@ -9,7 +9,7 @@ const origin = 'https://eastmoney.hasbai.xyz';
 const callbacks = [...new Set([...login.callbacks, origin + '/auth/callback'])];
 const config = {
   clients: [{ ...login, callbacks }, { name: 'eastmoney quant gateway', app_type: 'non_interactive', grant_types: ['client_credentials'], token_endpoint_auth_method: 'client_secret_post', is_first_party: true, jwt_configuration: { alg: 'RS256' } }],
-  resourceServers: [{ name: 'eastmoney gateway', identifier: origin + '/', signing_alg: 'RS256', token_lifetime: 28800, token_lifetime_for_web: 28800,
+  resourceServers: [{ name: 'eastmoney gateway', identifier: origin + '/', signing_alg: 'RS256', token_lifetime: 86400, token_lifetime_for_web: 86400,
     allow_offline_access: false, skip_consent_for_verifiable_first_party_clients: true, enforce_policies: false, token_dialect: 'access_token', scopes: [{ value: 'data.choice:read', description: 'Read generic Choice data through the Gateway' }] }],
   clientGrants: [{ client_id: 'eastmoney quant gateway', audience: origin + '/', scope: ['data.choice:read'], subject_type: 'client' }],
 };

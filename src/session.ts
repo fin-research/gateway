@@ -6,6 +6,7 @@ import { safeReturnTo } from './lib/auth-navigation.ts';
 import { auth0Issuer, verifyToken, EMAIL_CLAIM } from './tokens.ts';
 
 export const SESSION_COOKIE = '__Host-eastmoney_session';
+export const SESSION_MAX_AGE = 24 * 3600;
 const TRANSACTION_COOKIE = '__Host-eastmoney_login';
 type SessionEnv = Pick<Env, 'SESSION_SECRET' | 'SITE_ORIGIN' | 'AUTH0_LOGIN_DOMAIN' | 'AUTH0_CLIENT_ID' | 'AUTH0_CLIENT_SECRET' | 'AUTH0_AUDIENCE'>;
 const now = () => Math.floor(Date.now() / 1000);
@@ -60,17 +61,20 @@ export async function login(request: Request, env: SessionEnv) {
   target.search = new URLSearchParams({ client_id: env.AUTH0_CLIENT_ID, response_type: 'code',
     redirect_uri: env.SITE_ORIGIN + '/auth/callback', audience: env.AUTH0_AUDIENCE, scope: 'openid profile email',
     state, nonce, code_challenge: base64url.encode(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)))), code_challenge_method: 'S256' }).toString();
-  const transaction = await seal({ state, nonce, verifier, returnTo: safeReturnTo(url.searchParams.get('returnTo')) }, 'login', expiry, env);
+  const transaction = await seal({ state, nonce, verifier, returnTo: safeReturnTo(url.searchParams.get('returnTo')), popup: z.string().regex(/^[A-Za-z0-9_-]{32,64}$/).optional().parse(url.searchParams.get('popup') ?? undefined) }, 'login', expiry, env);
   return redirect(target.toString(), new Headers({ 'Set-Cookie': cookie(TRANSACTION_COOKIE, transaction, 600) }));
 }
 export async function callback(request: Request, env: SessionEnv, fetcher: typeof fetch = fetch) {
   const headers = new Headers({ 'Set-Cookie': cookie(TRANSACTION_COOKIE, '', 0), 'Cache-Control': 'no-store, private', 'Referrer-Policy': 'no-referrer' });
+  let popup: string | undefined;
   try {
     const params = new URL(request.url).searchParams;
     const raw = readCookie(request, TRANSACTION_COOKIE);
-    if (!raw || params.getAll('state').length !== 1 || params.getAll('code').length !== 1 || params.has('error')) throw new AccessError(401, '登录事务无效，请重新登录');
-    const transaction = z.object({ state: z.string(), nonce: z.string(), verifier: z.string(), returnTo: z.string() }).parse(await unseal(raw, 'login', env));
+    if (!raw || params.getAll('state').length !== 1) throw new AccessError(401, '登录事务无效，请重新登录');
+    const transaction = z.object({ state: z.string(), nonce: z.string(), verifier: z.string(), returnTo: z.string(), popup: z.string().regex(/^[A-Za-z0-9_-]{32,64}$/).optional() }).parse(await unseal(raw, 'login', env));
     if (params.get('state') !== transaction.state) throw new AccessError(401, '登录事务不匹配');
+    popup = transaction.popup;
+    if (params.getAll('code').length !== 1 || params.has('error')) throw new AccessError(401, '登录未完成，请重试');
     const code = params.get('code')!;
     if (!code || code.length > 4096) throw new AccessError(401, '登录事务无效');
     const response = await fetcher(new URL('oauth/token', auth0Issuer(env)), { method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(10000),
@@ -81,12 +85,13 @@ export async function callback(request: Request, env: SessionEnv, fetcher: typeo
     const [identity, access] = await Promise.all([verifyToken(tokens.id_token, env, 'id'), verifyToken(tokens.access_token, env)]);
     if (identity.nonce !== transaction.nonce || identity.sub !== access.sub || access.azp !== env.AUTH0_CLIENT_ID
       || typeof identity.email !== 'string' || identity.email.toLowerCase() !== String(access[EMAIL_CLAIM]).toLowerCase()) throw new AccessError(401, '登录身份不匹配');
-    const expiry = Math.min(access.exp!, now() + 8 * 3600);
+    const expiry = Math.min(access.exp!, now() + SESSION_MAX_AGE);
     const session = await seal({ token: tokens.access_token }, 'session', expiry, env);
     if (session.length > 3800) throw new AccessError(503, '会话超出安全长度');
     headers.append('Set-Cookie', cookie(SESSION_COOKIE, session, expiry - now()));
-    return redirect(safeReturnTo(transaction.returnTo), headers);
+    return popup ? popupResult(popup, true, env, headers) : redirect(safeReturnTo(transaction.returnTo), headers);
   } catch (error) {
+    if (popup) return popupResult(popup, false, env, headers);
     return Response.json({ detail: error instanceof AccessError ? error.message : '登录失败，请重新登录' }, { status: error instanceof AccessError ? error.status : 503, headers });
   }
 }
@@ -95,4 +100,21 @@ export function logout(env: SessionEnv) {
   target.search = new URLSearchParams({ client_id: env.AUTH0_CLIENT_ID, returnTo: env.SITE_ORIGIN + '/' }).toString();
   const headers = new Headers(); clearSession(headers);
   return redirect(target.toString(), headers);
+}
+
+/** No credentials or return URL cross the window boundary. The parent rechecks /auth/session. */
+function popupResult(id: string, ok: boolean, env: SessionEnv, headers: Headers): Response {
+  const nonce = random();
+  headers.set('Content-Type', 'text/html; charset=utf-8');
+  headers.set('Content-Security-Policy', `default-src 'none'; script-src 'nonce-${nonce}'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'`);
+  headers.set('X-Content-Type-Options', 'nosniff');
+  const message = JSON.stringify({ type: 'eastmoney:login', id, ok });
+  const origin = JSON.stringify(new URL(env.SITE_ORIGIN).origin).replace(/</g, '\u003c');
+  return new Response(`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${ok ? '登录成功' : '登录未完成'}</title><body><p>${ok ? '登录成功，可以关闭此窗口并回到原页面。' : '登录未完成，请回到原页面重试。'}</p><script nonce="${nonce}">
+    history.replaceState(null, '', '/auth/callback');
+    const message = ${message};
+    if (window.opener) window.opener.postMessage(message, ${origin});
+    try { const channel = new BroadcastChannel('eastmoney:login:' + message.id); channel.postMessage(message); channel.close(); } catch {}
+    if (message.ok) window.close();
+  </script></body></html>`, { headers });
 }
