@@ -71,8 +71,8 @@ try {
   assert.equal(badUpload.status, 401); assert.equal(storage.size, 0); checks++;
   const profile = await payload('/api/profile'); assert.equal(profile.email, 'test@18.cn'); checks++;
   f.updateProfile({ blocked: true });
-  assert.equal((await respond('/profile/__data.json')).status, 403); checks++;
+  assert.equal((await respond('/profile/__data.json')).status, 200); checks++;
   f.updateProfile({ blocked: false, email: 'changed@18.cn' });
-  assert.equal((await (await respond('/profile/__data.json')).json()).type, 'redirect'); checks++;
+  assert.equal((await (await respond('/profile/__data.json')).json()).type, 'data'); checks++;
   console.log(JSON.stringify({ integration: true, checks, gateway: 'Hono', dashboard: 'built SvelteKit', data: 'bundled real handler', externalServices: 'mocked', browserUsed: false }));
 } finally { for (const fn of cleanup) fn(); await rm(directory, { recursive: true, force: true }); }

@@ -1,0 +1,13 @@
+clients:
+  - name: eastmoney-login-roles
+    app_type: non_interactive
+    grant_types:
+      - client_credentials
+    is_first_party: true
+    jwt_configuration:
+      alg: RS256
+clientGrants:
+  - client_id: eastmoney-login-roles
+    audience: https://hasbai.eu.auth0.com/api/v2/
+    scope:
+      - read:roles

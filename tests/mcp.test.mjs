@@ -27,14 +27,14 @@ test('retired aggregate endpoint never executes research requests', async t => {
   assert.equal(f.calls.data.length, 0); assert.equal(f.calls.dashboard.length, 0); assert.equal(f.calls.auth0.length, 0);
 });
 
-test('MCP validates identity before CSRF, never admits Quant credentials and checks account revocation', async t => {
+test('MCP validates identity before CSRF, never admits Quant credentials and requires current-format signed claims', async t => {
   const f = await fixture(t);
   for (const path of ['/data/mcp']) {
     assert.equal((await gatewayRequest(new Request(f.env.SITE_ORIGIN + path, { method: 'POST', body: '{}' }), f.env)).status, 401);
     const machine = await f.signed({ gty: 'client-credentials', azp: 'quant', sub: 'quant@clients', scope: 'data.choice:read' });
     assert.equal((await gatewayRequest(f.request(path, { method: 'POST', token: machine, body: '{}' }), f.env)).status, 403);
-    f.updateProfile({ blocked: true });
-    assert.equal((await gatewayRequest(f.request(path, { method: 'POST', token: await f.signed(), body: '{}' }), f.env)).status, 403);
+    const legacy=await f.signed({'https://eastmoney.hasbai.xyz/roles':undefined});
+    assert.equal((await gatewayRequest(f.request(path, { method: 'POST', token: legacy, body: '{}' }), f.env)).status, 401);
   }
   assert.equal(f.calls.data.length, 0);
 });
@@ -59,5 +59,6 @@ test('portal Auth0 tokens authorize Data MCP only and cannot become Dashboard or
     assert.equal((await gatewayRequest(request(path), f.env)).status, path === '/data/graphql' ? 200 : 403);
   }
   f.updateProfile({ blocked: true });
-  assert.equal((await gatewayRequest(request('/data/mcp'), f.env)).status, 403);
+  assert.equal((await gatewayRequest(request('/data/mcp'), f.env)).status, 200);
+  assert.equal(f.calls.auth0.length,0);
 });

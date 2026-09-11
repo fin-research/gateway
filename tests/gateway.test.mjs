@@ -62,7 +62,7 @@ test('public Data resource/method matrix never calls identity, and protected res
   }
 });
 
-test('Gateway normalizes identity, strips all caller credentials and observes current account revocation', async t => {
+test('Gateway normalizes identity, strips all caller credentials and requires signed role claims without Management API reads', async t => {
   const f = await fixture(t); const token = await f.signed();
   const request = f.request('/api/credit', { token, headers: { Cookie: 'untrusted=secret', 'X-User-Id': 'attacker', 'X-Eastmoney-Gateway-Context': 'forged', 'Cf-Access-Jwt-Assertion': 'old' } });
   assert.equal((await gatewayRequest(request, f.env)).status, 200);
@@ -70,9 +70,12 @@ test('Gateway normalizes identity, strips all caller credentials and observes cu
   for (const name of ['Authorization', 'Cookie', 'X-User-Id', 'Cf-Access-Jwt-Assertion']) assert.equal(forwarded.headers.has(name), false);
   const context = JSON.parse(Buffer.from(forwarded.headers.get('X-Eastmoney-Gateway-Context'), 'base64url').toString());
   assert.equal(context.user.id, 'auth0|test'); assert.equal(context.user.email, 'test@18.cn');
-  f.updateProfile({ blocked: true }); assert.equal((await gatewayRequest(request, f.env)).status, 403);
-  f.updateProfile({ blocked: false, email: 'changed@18.cn' }); assert.equal((await gatewayRequest(request, f.env)).status, 401);
-  f.updateProfile({ email: 'test@18.cn', email_verified: false }); assert.equal((await gatewayRequest(request, f.env)).status, 403);
+  // Existing signed tokens retain their role/account snapshot until token renewal.
+  f.updateProfile({ blocked: true }); assert.equal((await gatewayRequest(request, f.env)).status, 200);
+  assert.equal(f.calls.auth0.length, 0, 'ordinary requests must not read Management API');
+  const legacy = await f.signed({'https://eastmoney.hasbai.xyz/roles': undefined});
+  assert.equal((await gatewayRequest(f.request('/api/credit', {token:legacy}), f.env)).status,401);
+
 });
 
 test('machines require an explicit client and Choice scope and never become Dashboard users or CAMEL users', async t => {

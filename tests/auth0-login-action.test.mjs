@@ -6,7 +6,7 @@ const legacyId = '12345678-1234-1234-1234-123456789abc';
 function context(user = {}, { canRedirect = true, client = 'eastmoney' } = {}) {
   const calls = { denied: [], redirected: [], claims: [] };
   return {
-    event: { client: { client_id: client }, secrets: { EASTMONEY_CLIENT_ID: 'eastmoney' },
+    event: { connection: {name:'eastmoney-email'}, authorization:{roles:[]}, client: { client_id: client }, secrets: { EASTMONEY_CLIENT_ID: 'eastmoney' },
       user: { user_id: 'auth0|new-account', email: 'new@18.cn', email_verified: false, ...user } },
     api: { access: { deny: (message) => calls.denied.push(message) },
       redirect: { canRedirect: () => canRedirect, sendUserTo: (...args) => calls.redirected.push(args) },
@@ -76,5 +76,40 @@ test('the dedicated portal client receives the same verified-user gate and claim
     await action.onExecutePostLogin(event, api);
     assert.equal(calls.claims.length, verified ? 1 : 0);
     assert.equal(calls.redirected.length, verified ? 0 : 1);
+  }
+});
+
+test('role IDs and profile are signed at login; refreshed role membership gets new claims',async t=>{
+  const f=context({email_verified:true,name:'测试账号',user_metadata:{department:'测试'}},{client:'eastmoney'});
+  Object.assign(f.event.secrets,{ROLES_DOMAIN:'hasbai.eu.auth0.com',ROLES_CLIENT_ID:'roles-reader',ROLES_CLIENT_SECRET:'unit-secret'});
+  const cache=new Map();f.api.cache={get:key=>cache.has(key)?{value:cache.get(key)}:undefined,set:(key,value)=>cache.set(key,value)};
+  const claims=new Map();f.api.accessToken.setCustomClaim=(key,value)=>claims.set(key,value);
+  const calls=[];t.mock.method(globalThis,'fetch',async(url,options)=>{
+    calls.push(String(url));assert.equal(options.redirect,'manual');
+    if(String(url).endsWith('/oauth/token'))return Response.json({access_token:'roles-token',expires_in:86400});
+    assert.ok(String(url).includes('/api/v2/roles?'));
+    assert.equal(options.headers.Authorization,'Bearer roles-token');
+    return Response.json([{id:'rol_A',name:'Admin'},{id:'rol_B',name:'Reviewer'}]);
+  });
+  f.event.authorization.roles=['Admin'];await action.onExecutePostLogin(f.event,f.api);
+  assert.deepEqual(claims.get('https://eastmoney.hasbai.xyz/roles'),[{id:'rol_A',name:'Admin'}]);
+  assert.deepEqual(claims.get('https://eastmoney.hasbai.xyz/profile'),{name:'测试账号',department:'测试',picture:'',connection:'eastmoney-email',verified:true});
+  f.event.authorization.roles=['Reviewer'];await action.onExecutePostLogin(f.event,f.api);
+  assert.deepEqual(claims.get('https://eastmoney.hasbai.xyz/roles'),[{id:'rol_B',name:'Reviewer'}]);
+  assert.equal(calls.filter(url=>url.endsWith('/oauth/token')).length,1);
+  assert.equal(calls.filter(url=>url.includes('/api/v2/roles?')).length,2);
+});
+
+test('missing or unresolved role catalogues fail login closed and do not sign privileges',async()=>{
+  const f=context({email_verified:true});f.event.authorization.roles=['Admin'];
+  const claims=[];f.api.accessToken.setCustomClaim=(...args)=>claims.push(args);
+  await action.onExecutePostLogin(f.event,f.api);
+  assert.equal(f.calls.denied.length,1);assert.equal(claims.length,0);
+});
+
+test('blocked accounts and other connections cannot mint site role claims',async()=>{
+  for(const change of ['blocked','connection']){
+    const f=context({email_verified:true});if(change==='blocked')f.event.user.blocked=true;else f.event.connection.name='foreign';
+    await action.onExecutePostLogin(f.event,f.api);assert.equal(f.calls.denied.length,1);assert.equal(f.calls.claims.length,0);
   }
 });

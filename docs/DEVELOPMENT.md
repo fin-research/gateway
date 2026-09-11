@@ -6,7 +6,7 @@ Gateway 是独立 Hono Worker。用户、角色与成员关系属于 Auth0；JWT
 
 - `src/app.ts`：Hono 路由、公开/保护分流、SvelteKit 数据请求错误协议。
 - `src/tokens.ts` / `session.ts`：固定 Auth0 JWKS、RS256/issuer/audience/azp/时效、PKCE/state/nonce、加密 Cookie、退出。
-- `src/lib/server/authorization.ts`：实时账号/角色、beta-open/enforce、无缓存权限查询。
+- `src/lib/server/authorization.ts`：JWT 角色快照、beta-open/enforce、无缓存权限查询。
 - `src/lib/permissions.ts` / `route-permissions.ts` / `server/permission-policy.ts`：唯一权限目录及路由策略。前两份通过 `scripts/sync-dashboard-contracts.mjs` 同步到 Dashboard 供菜单与导航使用。
 - `src/identity-service.ts`：私有 `IdentityService`，账号目录与角色配置；角色保存保留事务、角色锁、版本比对和严格白名单。
 - `src/data.ts`：Data 公开资源、GraphQL 执行操作/别名/片段的 Choice 字段判定和机器作用域。
@@ -29,13 +29,13 @@ git diff --check
 
 Worker Secret：`AUTH0_CLIENT_SECRET`、`AUTH0_MANAGEMENT_CLIENT_SECRET`、`SESSION_SECRET`。会话密钥为 32 字节随机值的 Base64URL；仅保存在受限部署文件与 Worker Secret。Gateway 唯一权限 binding `AUTHORIZATION_DB` 必须关闭 Hyperdrive 查询缓存，不使用 Dashboard 的业务缓存连接。
 
-生产公开 origin、Auth0 issuer/API audience、用户 client ID 和机器 client ID allowlist 均在 Wrangler vars。机器 scope 限 `data.choice:read`；Quant 凭据只在其未跟踪 `.env` 中。JWT 不含应用有效权限快照，权限每个受保护请求读取当前状态。
+生产公开 origin、Auth0 issuer/API audience、用户 client ID 和机器 client ID allowlist 均在 Wrangler vars。机器 scope 限 `data.choice:read`；Quant 凭据只在其未跟踪 `.env` 中。JWT 保存登录时的角色 ID/名称与资料，不含应用有效权限快照；enforce 模式每个受保护请求读取当前 permission 表。角色成员变更在重新登录或个人资料页“刷新登录状态”取得新 token 后生效。
 
 ## Auth0 配置
 
 按共享 AUTH 使用显式资源 `auth0:export` / `auth0:plan` / `auth0:apply`；默认禁止删除、不导出 Secret。`scripts/prepare-gateway-tenant.mjs` 从受限导出生成本次 web callback、API audience 与 Quant 机器应用配置；先审阅计划再 apply。保留现有角色、角色成员、注册 Form 和迁移账号例外。
 
-登录 Action 为 `auth0/actions/eastmoney-login.cjs`，给本站 API access token 添加 namespaced email；Auth0 原生 `sub` 即用户主键。发布只修改该 Action 的 code，保留 Secrets、依赖与绑定，并回读 deployed version。确认 Gateway 切换完成后移除本站应用的旧 Access callback/logout 白名单。
+登录 Action 为 `auth0/actions/eastmoney-login.cjs`，给本站 API access token 添加 namespaced email、roles 与 profile；Auth0 原生 `sub` 即用户主键。Action 在登录时从事件取得角色名称，通过专用 `eastmoney-login-roles` 机器应用（仅 `read:roles`）解析稳定角色 ID。声明配置见 `auth0/login-role-client.yaml`；`scripts/publish-login-claims.mjs` 先 plan、再 `--apply`，受控更新代码及角色查询 Secrets，保留依赖与绑定并回读 deployed version。旧 token 缺少角色声明时要求重新登录。确认 Gateway 切换完成后移除本站应用的旧 Access callback/logout 白名单。
 
 ## 生产切换
 
@@ -64,4 +64,4 @@ Worker Secret：`AUTH0_CLIENT_SECRET`、`AUTH0_MANAGEMENT_CLIENT_SECRET`、`SESS
 
 ## 身份接口限流恢复
 
-Auth0 Management API 的账号、角色读取及管理 token 获取遇到 429 时，在当前请求内按 `Retry-After` / `X-RateLimit-Reset` 退避并加入抖动；最多重试四次，总等待不超过十秒。上游要求的等待超出预算时直接返回可重试的 `IDENTITY_RATE_LIMITED`，不提前再次冲击上游。账号停用、角色撤销、未知身份仍实时检查；不缓存账号/角色/权限，不用过期快照放行。修改资料、角色等写操作不自动重放。日志只记阶段、次数、等待时长和状态码，不记录凭据或个人信息。
+Auth0 Management API 的账号、角色读取及管理 token 获取遇到 429 时，在当前请求内按 `Retry-After` / `X-RateLimit-Reset` 退避并加入抖动；最多重试四次，总等待不超过十秒。上游要求的等待超出预算时直接返回可重试的 `IDENTITY_RATE_LIMITED`，不提前再次冲击上游。此退避仅用于实际资料、目录及角色管理操作；普通业务准入不调用 Management API。账号状态与角色成员关系在 Auth0 签发新 token 时检查；既有 JWT 按其有效期使用，角色权限配置仍逐请求查表。修改资料、角色等写操作不自动重放。日志只记阶段、次数、等待时长和状态码，不记录凭据或个人信息。

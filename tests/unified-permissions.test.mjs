@@ -28,45 +28,37 @@ test('read and write policies are distinct, and unknown routes/actions and ambig
   for (const mode of [undefined, '', 'legacy', 'open', 'typo']) assert.throws(() => authorizationMode(mode), { status: 503 });
 });
 
-test('central authorization validates Auth0 accounts, opens beta to roleless users, and unions live role permissions in enforcement', async () => {
+test('JWT role membership is stable until renewal while permission grants are read on every request', async () => {
   const { privateKey, publicKey } = await generateKeyPair('RS256');
-  const jwk = { ...await exportJWK(publicKey), alg: 'RS256', kid: 'unified-permissions-test', use: 'sig' };
-  const env = { AUTH0_LOGIN_DOMAIN:'unified-permissions.auth0.com', AUTH0_AUDIENCE:'site', AUTH0_CLIENT_ID:'login', AUTHORIZATION_MODE:'beta-open', AUTH0_DOMAIN:'permissions.eu.auth0.com', AUTH0_MANAGEMENT_CLIENT_ID:'app', AUTH0_MANAGEMENT_CLIENT_SECRET:'fixture', AUTHORIZATION_DB:{connectionString:'postgres://fixture'} };
-  const token = await new SignJWT({ azp:'login', 'https://eastmoney.hasbai.xyz/email':'person@18.cn' }).setProtectedHeader({alg:'RS256',kid:jwk.kid}).setSubject('auth0|person').setIssuer('https://' + env.AUTH0_LOGIN_DOMAIN + '/').setAudience('site').setIssuedAt().setExpirationTime('5m').sign(privateKey);
-  let blocked = false; let email = 'person@18.cn'; let roles = []; let granted = ['financing.project:read'];
-  const originalFetch = globalThis.fetch;
-  const original = { connect:Client.prototype.connect, query:Client.prototype.query, end:Client.prototype.end };
-  const fetcher = async (input) => {
-    const url = new URL(input instanceof Request ? input.url : input);
-    if (url.pathname.endsWith('/jwks.json')) return Response.json({keys:[jwk]});
-    if (url.pathname === '/oauth/token') return Response.json({access_token:'fixture',expires_in:3600});
-    if (url.pathname.endsWith('/roles')) return Response.json(roles);
-    return Response.json({user_id:'auth0|person',email,name:'测试人员',email_verified:true,blocked,identities:[{connection:'eastmoney-email'}]});
-  };
-  globalThis.fetch=fetcher;
-  Client.prototype.connect=async function(){}; Client.prototype.end=async function(){};
-  Client.prototype.query=async function(sql, values) { assert.deepEqual(values, [['rol_A','rol_B']]); return {rows:granted.map(permission_code=>({permission_code}))}; };
+  const jwk={...await exportJWK(publicKey),alg:'RS256',kid:'jwt-roles'};
+  const env={AUTH0_LOGIN_DOMAIN:'jwt-roles.auth0.com',AUTH0_AUDIENCE:'site',AUTH0_CLIENT_ID:'login',AUTHORIZATION_MODE:'enforce',AUTHORIZATION_DB:{connectionString:'postgres://fixture'}};
+  const sign=roles=>new SignJWT({azp:'login','https://eastmoney.hasbai.xyz/email':'test@18.cn',
+    'https://eastmoney.hasbai.xyz/roles':roles,'https://eastmoney.hasbai.xyz/profile':{name:'测试账号',department:'测试',picture:'',connection:'eastmoney-email',verified:true}})
+    .setProtectedHeader({alg:'RS256',kid:jwk.kid}).setSubject('auth0|test').setIssuer('https://'+env.AUTH0_LOGIN_DOMAIN+'/').setAudience('site').setIssuedAt().setExpirationTime('5m').sign(privateKey);
+  const roles=[{id:'rol_A',name:'角色 A',description:''},{id:'rol_B',name:'角色 B',description:''}];
+  let granted=['financing.project:read'];let queries=[];
+  const originalFetch=globalThis.fetch;const original={connect:Client.prototype.connect,query:Client.prototype.query,end:Client.prototype.end};
+  globalThis.fetch=async input=>{assert.ok(String(input).endsWith('/jwks.json'),'only JWKS network access is permitted');return Response.json({keys:[jwk]})};
+  Client.prototype.connect=async function(){};Client.prototype.end=async function(){};
+  Client.prototype.query=async function(sql,values){queries.push(values);return {rows:granted.map(permission_code=>({permission_code}))}};
+  const forbidden=async()=>{throw Error('Management API must not be called')};
   try {
-    const req = request('/financing/projects','GET',{Authorization:'Bearer ' + token});
-    const beta = await authorizeRequest(req,env,'/financing/projects',fetcher);
-    assert.equal(beta.user.auth0Id,'auth0|person'); assert.equal(beta.user.id,'auth0|person');
-    assert.deepEqual(beta.permissions,PERMISSION_CODES); assert.deepEqual(beta.user.authorization.roles,[]);
-    await assert.rejects(authorizeRequest(request('/financing/projects'),env,'/financing/projects',fetcher), {status:401});
-    blocked=true; await assert.rejects(authorizeRequest(req,env,'/financing/projects',fetcher), {status:403}); blocked=false;
-    email='changed@18.cn'; await assert.rejects(authorizeRequest(req,env,'/financing/projects',fetcher), {status:401}); email='person@18.cn';
-    roles=[{id:'rol_A',name:'任意角色 A'},{id:'rol_B',name:'任意角色 B'}]; env.AUTHORIZATION_MODE='enforce';
-    assert.deepEqual((await authorizeRequest(req,env,'/financing/projects',fetcher)).permissions,granted);
-    granted=[]; await assert.rejects(authorizeRequest(req,env,'/financing/projects',fetcher), {status:403});
-    await assert.rejects(authorizeRequest(request('/financing/projects?/createProject','POST',{Authorization:'Bearer '+token,Origin:'https://other.test'}),env,'/financing/projects',fetcher), {status:403});
-    const noManagement = async () => { throw new Error('market reads must not query Auth0 Management API'); };
-    const marketRequest = request('/api/market-resources/omo','GET',{Authorization:'Bearer '+token});
-    const market = await authorizeRequest(marketRequest, env, '/api/market-resources/[resource]', noManagement);
-    assert.equal(market.user, null);
-    assert.equal(market.directory, undefined);
-    assert.deepEqual(market.permissions, []);
-    assert.equal((await authorizeRequest(request('/api/market-resources/omo'), env, '/api/market-resources/[resource]', noManagement)).user, null);
-    await assert.rejects(authorizeRequest(request('/api/market-resources/omo','POST',{Authorization:'Bearer '+token}), env, '/api/market-resources/[resource]', noManagement), {status:403});
-  } finally { globalThis.fetch=originalFetch; Object.assign(Client.prototype,original); }
+    const token=await sign(roles);const req=request('/financing/projects','GET',{Authorization:'Bearer '+token});
+    assert.deepEqual((await authorizeRequest(req,env,'/financing/projects',forbidden)).permissions,granted);
+    assert.deepEqual(queries.at(-1),[['rol_A','rol_B']]);
+    granted=[];await assert.rejects(authorizeRequest(req,env,'/financing/projects',forbidden),{status:403});
+    granted=['financing.project:read'];assert.deepEqual((await authorizeRequest(req,env,'/financing/projects',forbidden)).user.authorization.roles,roles);
+    const renewed=await sign([{id:'rol_C',name:'角色 C'}]);
+    await authorizeRequest(request('/financing/projects','GET',{Authorization:'Bearer '+renewed}),env,'/financing/projects',forbidden);
+    assert.deepEqual(queries.at(-1),[['rol_C']]);assert.equal(queries.length,4);
+    env.AUTHORIZATION_MODE='beta-open';const before=queries.length;
+    assert.deepEqual((await authorizeRequest(req,env,'/financing/projects',forbidden)).permissions,PERMISSION_CODES);assert.equal(queries.length,before);
+    const noRoles=await sign([]);assert.deepEqual((await authorizeRequest(request('/financing/projects','GET',{Authorization:'Bearer '+noRoles}),env,'/financing/projects',forbidden)).user.authorization.roles,[]);
+    for(const roleClaim of [undefined,['admin'],[{id:'invalid',name:'bad'}],[roles[0],roles[0]]]){
+      const invalid=await sign(roleClaim);await assert.rejects(authorizeRequest(request('/financing/projects','GET',{Authorization:'Bearer '+invalid}),env,'/financing/projects',forbidden),{status:401});
+    }
+    assert.equal((await authorizeRequest(request('/market-briefing'),env,'/market-briefing',forbidden)).user,null);
+  } finally {globalThis.fetch=originalFetch;Object.assign(Client.prototype,original)}
 });
 
 test('Auth0 roles are paginated and no user/role tables or permission writes are needed for the directory', async () => {

@@ -23,7 +23,7 @@ test('anonymous and test@18.cn cover all registered routes and actions through c
     AUTHORIZATION_MODE: 'beta-open', AUTH0_DOMAIN: 'auth-matrix.eu.auth0.com',
     AUTH0_MANAGEMENT_CLIENT_ID: 'two-identities', AUTH0_MANAGEMENT_CLIENT_SECRET: 'unit-fixture',
   };
-  const token = await new SignJWT({ azp: 'login', 'https://eastmoney.hasbai.xyz/email': 'test@18.cn' })
+  const token = await new SignJWT({ azp: 'login', 'https://eastmoney.hasbai.xyz/roles': [], 'https://eastmoney.hasbai.xyz/profile': {name:'测试账号',department:'测试',picture:'',connection:'eastmoney-email',verified:true}, 'https://eastmoney.hasbai.xyz/email': 'test@18.cn' })
     .setProtectedHeader({ alg: 'RS256', kid: jwk.kid }).setSubject('auth0|unit-test-account')
     .setIssuer(`https://${env.AUTH0_LOGIN_DOMAIN}/`).setAudience('site').setIssuedAt().setExpirationTime('5m').sign(privateKey);
   let managementCalls = 0;
@@ -71,6 +71,7 @@ test('anonymous and test@18.cn cover all registered routes and actions through c
         assert.equal(signed.user.auth0Id, 'auth0|unit-test-account');
       }
     }
+    assert.equal(managementCalls, 0, 'business authorization must not consult Auth0 Management API');
     assert.ok(cases.length > 100, 'route matrix unexpectedly lost application coverage');
   } finally { globalThis.fetch = originalFetch; }
 });

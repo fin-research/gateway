@@ -27,7 +27,7 @@ export async function fixture(t) {
     const now = Math.floor(Date.now() / 1000);
     return new SignJWT({ iss: `https://${env.AUTH0_LOGIN_DOMAIN}/`, aud: kind === 'access' ? env.AUTH0_AUDIENCE : env.AUTH0_CLIENT_ID,
       sub: 'auth0|test', iat: now, exp: now + 300, azp: env.AUTH0_CLIENT_ID,
-      'https://eastmoney.hasbai.xyz/email': 'test@18.cn', ...overrides }).setProtectedHeader({ alg: 'RS256', kid: jwk.kid }).sign(privateKey);
+      'https://eastmoney.hasbai.xyz/roles': [], 'https://eastmoney.hasbai.xyz/profile': {name:'测试账号',department:'测试',picture:'',connection:'eastmoney-email',verified:true}, 'https://eastmoney.hasbai.xyz/email': 'test@18.cn', ...overrides }).setProtectedHeader({ alg: 'RS256', kid: jwk.kid }).sign(privateKey);
   }
   const request = (path, { token, method = 'GET', headers = {}, body } = {}) => new Request(env.SITE_ORIGIN + path, {
     method, headers: { Origin: env.SITE_ORIGIN, ...(token ? { Authorization: 'Bearer ' + token } : {}), ...headers }, body,
