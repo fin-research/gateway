@@ -8,7 +8,7 @@ import { auth0Issuer, verifyToken, EMAIL_CLAIM } from './tokens.ts';
 export const SESSION_COOKIE = '__Host-eastmoney_session';
 export const SESSION_MAX_AGE = 24 * 3600;
 const TRANSACTION_COOKIE = '__Host-eastmoney_login';
-type SessionEnv = Pick<Env, 'SESSION_SECRET' | 'SITE_ORIGIN' | 'AUTH0_LOGIN_DOMAIN' | 'AUTH0_CLIENT_ID' | 'AUTH0_CLIENT_SECRET' | 'AUTH0_AUDIENCE'>;
+type SessionEnv = Pick<Env, 'SESSION_SECRET' | 'SITE_ORIGIN' | 'AUTH0_LOGIN_DOMAIN' | 'AUTH0_CLIENT_ID' | 'AUTH0_CLIENT_SECRET' | 'AUTH0_AUDIENCE' | 'AUTH0_ORGANIZATION_ID' | 'AUTH0_MACHINE_CLIENT_IDS'>;
 const now = () => Math.floor(Date.now() / 1000);
 const random = () => base64url.encode(crypto.getRandomValues(new Uint8Array(32)));
 function key(env: SessionEnv) {
@@ -60,7 +60,7 @@ export async function login(request: Request, env: SessionEnv) {
   const target = new URL('authorize', auth0Issuer(env));
   target.search = new URLSearchParams({ client_id: env.AUTH0_CLIENT_ID, response_type: 'code',
     redirect_uri: env.SITE_ORIGIN + '/auth/callback', audience: env.AUTH0_AUDIENCE, scope: 'openid profile email',
-    state, nonce, code_challenge: base64url.encode(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)))), code_challenge_method: 'S256' }).toString();
+    organization: env.AUTH0_ORGANIZATION_ID, state, nonce, code_challenge: base64url.encode(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)))), code_challenge_method: 'S256' }).toString();
   const transaction = await seal({ state, nonce, verifier, returnTo: safeReturnTo(url.searchParams.get('returnTo')), popup: z.string().regex(/^[A-Za-z0-9_-]{32,64}$/).optional().parse(url.searchParams.get('popup') ?? undefined) }, 'login', expiry, env);
   return redirect(target.toString(), new Headers({ 'Set-Cookie': cookie(TRANSACTION_COOKIE, transaction, 600) }));
 }

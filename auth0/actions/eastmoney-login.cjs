@@ -1,7 +1,10 @@
 // Auth0 post-login Action: eastmoney login claims (node22).
+const ORGANIZATION_ID = 'org_6yvoRRCkzk3eGkBS';
+const LEGACY_ROLE_IDS = new Set(['rol_eoDAJuWbdjwEzEln', 'rol_dUEQWoUpRu5kzcqi', 'rol_8WnIILDtpeyWuu3O']);
 const MCP_CLIENT_ID = 'M1a5PF3UJaFIZv1k4HO4IV06Z5fXQBHV';
 exports.onExecutePostLogin = async (event, api) => {
   if (![event.secrets.EASTMONEY_CLIENT_ID, MCP_CLIENT_ID].includes(event.client.client_id)) return;
+  if (event.organization?.id !== ORGANIZATION_ID) return api.access.deny('请通过东方财富组织登录');
   if (event.connection?.name !== 'eastmoney-email' || event.user.blocked) return api.access.deny('账号不可用于本站登录');
   const metadata = event.user.app_metadata || {};
   const legacy = metadata.migrated_from === 'neon'
@@ -66,7 +69,7 @@ async function roleClaims(event, api) {
   for (let page = 0; page < 10; page++) {
     const rows = await json(`${origin}/api/v2/roles?per_page=100&page=${page}`, { headers: { Authorization: `Bearer ${token}` } });
     if (!Array.isArray(rows)) throw new Error('catalogue');
-    for (const role of rows) if (names.includes(role.name)) {
+    for (const role of rows) if (names.includes(role.name) && (role.owner_id === ORGANIZATION_ID || LEGACY_ROLE_IDS.has(role.id))) {
       if (!/^rol_[A-Za-z0-9]+$/.test(role.id) || typeof role.name !== 'string') throw new Error('role');
       matched.push({ id: role.id, name: role.name });
     }

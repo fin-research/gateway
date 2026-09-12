@@ -3,7 +3,7 @@ export async function fixture(t) {
   const { privateKey, publicKey } = await generateKeyPair('RS256');
   const jwk = { ...await exportJWK(publicKey), alg: 'RS256', kid: crypto.randomUUID() };
   const env = { SITE_ORIGIN: 'https://eastmoney.hasbai.xyz', AUTH0_LOGIN_DOMAIN: `${crypto.randomUUID()}.auth0.com`, AUTH0_DOMAIN: 'unit.auth0.com',
-    AUTH0_CLIENT_ID: 'login', AUTH0_CLIENT_SECRET: 'unit-secret', AUTH0_AUDIENCE: 'https://eastmoney.hasbai.xyz/',
+    AUTH0_ORGANIZATION_ID: 'org_Eastmoney', AUTH0_CLIENT_ID: 'login', AUTH0_CLIENT_SECRET: 'unit-secret', AUTH0_AUDIENCE: 'https://eastmoney.hasbai.xyz/',
     AUTH0_MANAGEMENT_CLIENT_ID: crypto.randomUUID(), AUTH0_MANAGEMENT_CLIENT_SECRET: 'unit-management', AUTHORIZATION_MODE: 'beta-open',
     AUTH0_MACHINE_CLIENT_IDS: 'quant', SESSION_SECRET: Buffer.alloc(32, 7).toString('base64url') };
   const calls = { dashboard: [], data: [], auth0: [] };
@@ -26,7 +26,7 @@ export async function fixture(t) {
   async function signed(overrides = {}, kind = 'access') {
     const now = Math.floor(Date.now() / 1000);
     return new SignJWT({ iss: `https://${env.AUTH0_LOGIN_DOMAIN}/`, aud: kind === 'access' ? env.AUTH0_AUDIENCE : env.AUTH0_CLIENT_ID,
-      sub: 'auth0|test', iat: now, exp: now + 300, azp: env.AUTH0_CLIENT_ID,
+      org_id: env.AUTH0_ORGANIZATION_ID, sub: 'auth0|test', iat: now, exp: now + 300, azp: env.AUTH0_CLIENT_ID,
       'https://eastmoney.hasbai.xyz/roles': [], 'https://eastmoney.hasbai.xyz/profile': {name:'测试账号',department:'测试',picture:'',connection:'eastmoney-email',verified:true}, 'https://eastmoney.hasbai.xyz/email': 'test@18.cn', ...overrides }).setProtectedHeader({ alg: 'RS256', kid: jwk.kid }).sign(privateKey);
   }
   const request = (path, { token, method = 'GET', headers = {}, body } = {}) => new Request(env.SITE_ORIGIN + path, {

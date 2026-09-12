@@ -19,3 +19,7 @@ Quant 使用独立机器应用 `eastmoney quant gateway`；只授予 Gateway API
 `/auth/login?popup=<32–64 位随机 ID>` 将 popup ID 与 state、nonce、PKCE 一起写入加密事务。回调仅从已验证事务读取 ID；成功设置 HttpOnly Cookie，再输出无凭据的 HTML 完成通知。回调页面使用 nonce CSP、no-store 和 no-referrer，清除地址栏 OAuth 参数；父页校验消息后重新读取 `/auth/session`。普通直接访问的重定向登录流程继续可用。
 
 令牌时长变更使用 Deploy CLI 导出 `resourceServers`，只修改本站 API 两个 lifetime 字段，保留导出中其他 API 原配置；plan 确認仅本站 API 更新后 apply，并再次 export 回读。
+
+## Eastmoney 组织隔离
+
+网站与 MCP 用户登录绑定 `org_6yvoRRCkzk3eGkBS`，Gateway 校验 `org_id`；账号目录和成员角色使用本组织范围。当前套餐不支持 M2M Organizations，Quant 保留单独 Choice 白名单。应用盘点、迁移、套餐限制与回退见 [组织与应用边界](../docs/AUTH0_ORGANIZATIONS.md)。

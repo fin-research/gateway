@@ -20,8 +20,11 @@ export function deploymentArguments(argv, cwd = process.cwd()) {
   const output = resolve(cwd, options.get('output') ?? '.auth0-deploy/export');
   const command = mode === 'export'
     ? ['export', '--format=yaml', '--output_folder=' + output]
-    : ['import', '--input_file=' + resolve(cwd, options.get('input')), '--dry-run', ...(mode === 'apply' ? ['--apply'] : [])];
-  return { mode, included, output, command };
+    : ['import', '--input_file=' + resolve(cwd, options.get('input')), ...(mode === 'plan' ? ['--dry-run'] : [])];
+  // Reload pristine assets after preview; handlers may normalize them in place.
+  // Apply still runs only after the independent preview completes successfully.
+  const commands = mode === 'apply' ? [[...command, '--dry-run'], command] : [command];
+  return { mode, included, output, command, commands };
 }
 
 async function main() {
@@ -34,17 +37,21 @@ async function main() {
   Object.assign(env, credentials, { AUTH0_INCLUDED_ONLY: JSON.stringify(plan.included),
     AUTH0_ALLOW_DELETE: 'false', AUTH0_EXPORT_SECRETS: 'false' });
   const bin = fileURLToPath(new URL('../node_modules/auth0-deploy-cli/lib/index.js', import.meta.url));
-  const child = spawn(process.execPath, [bin, ...plan.command], { env, stdio: ['ignore', 'pipe', 'pipe'] });
-  // Buffer logs so secrets split across stdout chunks are still redacted.
-  const chunks = []; let size = 0;
-  for (const stream of [child.stdout, child.stderr]) stream.on('data', bytes => {
-    size += bytes.length;
-    if (size > 4 * 1024 * 1024) child.kill(); else chunks.push(bytes);
-  });
-  const exit = await new Promise((resolveExit, reject) => { child.once('error', reject); child.once('close', code => resolveExit(code)); });
-  let log = Buffer.concat(chunks).toString('utf8').replaceAll(credentials.AUTH0_CLIENT_SECRET, '[redacted]');
-  log = log.replace(/(?:Bearer\s+)[A-Za-z0-9._~-]+/gi, 'Bearer [redacted]');
-  process.stdout.write(log);
+  let exit = 0;
+  for (const command of plan.commands) {
+    const child = spawn(process.execPath, ['--use-env-proxy', bin, ...command], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+    // Buffer logs so secrets split across stdout chunks are still redacted.
+    const chunks = []; let size = 0;
+    for (const stream of [child.stdout, child.stderr]) stream.on('data', bytes => {
+      size += bytes.length;
+      if (size > 4 * 1024 * 1024) child.kill(); else chunks.push(bytes);
+    });
+    exit = await new Promise((resolveExit, reject) => { child.once('error', reject); child.once('close', code => resolveExit(code)); });
+    let log = Buffer.concat(chunks).toString('utf8').replaceAll(credentials.AUTH0_CLIENT_SECRET, '[redacted]');
+    log = log.replace(/(?:Bearer\s+)[A-Za-z0-9._~-]+/gi, 'Bearer [redacted]');
+    process.stdout.write(log);
+    if (exit !== 0) break;
+  }
   console.log(JSON.stringify({ mode: plan.mode, tenant: credentials.AUTH0_DOMAIN, resources: plan.included, deletionAllowed: false, success: exit === 0 }));
   if (exit !== 0) process.exitCode = 1;
 }

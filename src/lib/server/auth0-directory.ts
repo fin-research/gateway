@@ -3,7 +3,7 @@ import { auth0ProfileCanLogin, createAuth0ManagementClient } from './auth0-manag
 import { AccessError } from './access.ts';
 import type { SiteIdentity } from '../identity.ts';
 
-type Config = Pick<Env, 'AUTH0_DOMAIN' | 'AUTH0_MANAGEMENT_CLIENT_ID' | 'AUTH0_MANAGEMENT_CLIENT_SECRET'>;
+type Config = Pick<Env, 'AUTH0_DOMAIN' | 'AUTH0_ORGANIZATION_ID' | 'AUTH0_MANAGEMENT_CLIENT_ID' | 'AUTH0_MANAGEMENT_CLIENT_SECRET'>;
 export const roleSchema = z.object({ id: z.string().regex(/^rol_[A-Za-z0-9]+$/), name: z.string(), description: z.string().optional().default('') });
 const userSchema = z.object({ user_id: z.string().regex(/^auth0\|\S+$/), email: z.string(), name: z.string().optional(),
   blocked: z.boolean().optional(), email_verified: z.boolean().optional(), picture: z.string().optional(),
@@ -17,14 +17,29 @@ export function createDirectory(config: Config, fetchImpl: typeof fetch = fetch)
     clientSecret: config.AUTH0_MANAGEMENT_CLIENT_SECRET, fetchImpl });
   let roleRequest: Promise<Auth0Role[]> | undefined;
   let peopleRequest: Promise<DirectoryPerson[]> | undefined;
-  const roles = () => roleRequest ??= manager.list('roles').then((rows) => z.array(roleSchema).parse(rows));
+  if (!/^org_[A-Za-z0-9]+$/.test(config.AUTH0_ORGANIZATION_ID)) throw new AccessError(503, '组织尚未配置完成');
+  const org = `organizations/${config.AUTH0_ORGANIZATION_ID}`;
+  // Existing role IDs are database permission keys. Their assignments are now
+  // organization-scoped; retain definitions without exposing other tenant roles.
+  const legacyRoleIds = new Set(['rol_eoDAJuWbdjwEzEln', 'rol_dUEQWoUpRu5kzcqi', 'rol_8WnIILDtpeyWuu3O']);
+  const roles = () => roleRequest ??= manager.list('roles').then((rows) => {
+    const scoped = z.array(roleSchema.extend({ owner_id: z.string().optional() })).parse(rows);
+    return scoped.filter(role => role.owner_id === config.AUTH0_ORGANIZATION_ID || legacyRoleIds.has(role.id)).map(role => roleSchema.parse(role));
+  });
+  let memberRequest: Promise<Set<string>> | undefined;
+  const members = () => memberRequest ??= manager.list(`${org}/members`).then(rows =>
+    new Set(z.array(z.object({ user_id: z.string() })).parse(rows).map(member => member.user_id)));
+
   async function user(id: string) {
+    if (!(await members()).has(id)) throw new AccessError(403, '账号不属于本站组织');
     const parsed = userSchema.parse(await manager.request(`users/${encodeURIComponent(id)}`));
     if (parsed.user_id !== id || !parsed.identities.some((item) => item.connection === 'eastmoney-email')) throw new AccessError(403, '账号不属于本站');
     return parsed;
   }
   async function userRoles(id: string) {
-    return z.array(roleSchema).parse(await manager.list(`users/${encodeURIComponent(id)}/roles`));
+    if (!(await members()).has(id)) throw new AccessError(403, '账号不属于本站组织');
+    const allowed = new Set((await roles()).map(role => role.id));
+    return z.array(roleSchema).parse(await manager.list(`${org}/members/${encodeURIComponent(id)}/roles`)).filter(role => allowed.has(role.id));
   }
   return {
     roles, user, userRoles,
@@ -39,20 +54,15 @@ export function createDirectory(config: Config, fetchImpl: typeof fetch = fetch)
     },
     people() {
       return peopleRequest ??= (async () => {
-        const allRoles = await roles();
-        const memberships = new Map<string, Auth0Role[]>();
-        // Sequential role paging bounds fanout and respects Management API rate limits.
-        for (const role of allRoles) {
-          for (const member of await manager.list(`roles/${encodeURIComponent(role.id)}/users`)) {
-            const id = z.object({ user_id: z.string() }).parse(member).user_id;
-            memberships.set(id, [...(memberships.get(id) ?? []), role]);
-          }
+        const people: DirectoryPerson[] = [];
+        // Only organization members are read, with bounded sequential requests.
+        // Auth0 organization membership responses omit account status/metadata.
+        for (const id of await members()) {
+          const profile = await user(id);
+          people.push({ id, name: profile.name || profile.email, email: profile.email,
+            active: auth0ProfileCanLogin(profile), roles: await userRoles(id) });
         }
-        const users = z.array(userSchema).parse(await manager.list('users?search_engine=v3&q=' + encodeURIComponent('identities.connection:"eastmoney-email"')));
-        return users.filter((item) => item.identities.some((entry) => entry.connection === 'eastmoney-email')).map((item) => ({
-          id: item.user_id, name: item.name || item.email, email: item.email,
-          active: auth0ProfileCanLogin(item), roles: memberships.get(item.user_id) ?? [],
-        })).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+        return people.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
       })();
     },
   };

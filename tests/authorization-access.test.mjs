@@ -19,11 +19,11 @@ test('anonymous and test@18.cn cover all registered routes and actions through c
   const { privateKey, publicKey } = await generateKeyPair('RS256');
   const jwk = { ...await exportJWK(publicKey), kid: 'two-identities', alg: 'RS256' };
   const env = {
-    AUTH0_LOGIN_DOMAIN: 'auth-matrix.auth0.com', AUTH0_AUDIENCE: 'site', AUTH0_CLIENT_ID: 'login',
+    AUTH0_LOGIN_DOMAIN: 'auth-matrix.auth0.com', AUTH0_AUDIENCE: 'site', AUTH0_ORGANIZATION_ID:'org_Eastmoney',AUTH0_CLIENT_ID: 'login',
     AUTHORIZATION_MODE: 'beta-open', AUTH0_DOMAIN: 'auth-matrix.eu.auth0.com',
     AUTH0_MANAGEMENT_CLIENT_ID: 'two-identities', AUTH0_MANAGEMENT_CLIENT_SECRET: 'unit-fixture',
   };
-  const token = await new SignJWT({ azp: 'login', 'https://eastmoney.hasbai.xyz/roles': [], 'https://eastmoney.hasbai.xyz/profile': {name:'测试账号',department:'测试',picture:'',connection:'eastmoney-email',verified:true}, 'https://eastmoney.hasbai.xyz/email': 'test@18.cn' })
+  const token = await new SignJWT({org_id:'org_Eastmoney', azp: 'login', 'https://eastmoney.hasbai.xyz/roles': [], 'https://eastmoney.hasbai.xyz/profile': {name:'测试账号',department:'测试',picture:'',connection:'eastmoney-email',verified:true}, 'https://eastmoney.hasbai.xyz/email': 'test@18.cn' })
     .setProtectedHeader({ alg: 'RS256', kid: jwk.kid }).setSubject('auth0|unit-test-account')
     .setIssuer(`https://${env.AUTH0_LOGIN_DOMAIN}/`).setAudience('site').setIssuedAt().setExpirationTime('5m').sign(privateKey);
   let managementCalls = 0;

@@ -150,7 +150,7 @@ try {
     const client = management('get', 'clients/M1a5PF3UJaFIZv1k4HO4IV06Z5fXQBHV?fields=client_id,client_secret&include_fields=true');
     const state = randomBytes(32).toString('base64url'), verifier = randomBytes(32).toString('base64url');
     const authorize = new URL(auth + '/authorize');
-    authorize.search = new URLSearchParams({ client_id: client.client_id, response_type: 'code', redirect_uri: portal + '/servers-callback', audience: 'https://eastmoney.hasbai.xyz/', scope: 'openid profile email offline_access', connection: 'eastmoney-email', state, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' }).toString();
+    authorize.search = new URLSearchParams({ client_id: client.client_id, response_type: 'code', redirect_uri: portal + '/servers-callback', audience: 'https://eastmoney.hasbai.xyz/', scope: 'openid profile email offline_access', connection: 'eastmoney-email', organization: 'org_6yvoRRCkzk3eGkBS', state, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' }).toString();
     const returned = await follow(authorize, true);
     if (returned.searchParams.get('state') !== state) throw new Error('Data OAuth state mismatch');
     const exchange = await fetch(auth + '/oauth/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ grant_type: 'authorization_code', client_id: client.client_id, client_secret: client.client_secret, redirect_uri: portal + '/servers-callback', code_verifier: verifier, code: returned.searchParams.get('code') }) });

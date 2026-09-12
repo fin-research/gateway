@@ -31,8 +31,8 @@ test('read and write policies are distinct, and unknown routes/actions and ambig
 test('JWT role membership is stable until renewal while permission grants are read on every request', async () => {
   const { privateKey, publicKey } = await generateKeyPair('RS256');
   const jwk={...await exportJWK(publicKey),alg:'RS256',kid:'jwt-roles'};
-  const env={AUTH0_LOGIN_DOMAIN:'jwt-roles.auth0.com',AUTH0_AUDIENCE:'site',AUTH0_CLIENT_ID:'login',AUTHORIZATION_MODE:'enforce',AUTHORIZATION_DB:{connectionString:'postgres://fixture'}};
-  const sign=roles=>new SignJWT({azp:'login','https://eastmoney.hasbai.xyz/email':'test@18.cn',
+  const env={AUTH0_LOGIN_DOMAIN:'jwt-roles.auth0.com',AUTH0_AUDIENCE:'site',AUTH0_ORGANIZATION_ID:'org_Eastmoney',AUTH0_CLIENT_ID:'login',AUTHORIZATION_MODE:'enforce',AUTHORIZATION_DB:{connectionString:'postgres://fixture'}};
+  const sign=roles=>new SignJWT({org_id:'org_Eastmoney',azp:'login','https://eastmoney.hasbai.xyz/email':'test@18.cn',
     'https://eastmoney.hasbai.xyz/roles':roles,'https://eastmoney.hasbai.xyz/profile':{name:'测试账号',department:'测试',picture:'',connection:'eastmoney-email',verified:true}})
     .setProtectedHeader({alg:'RS256',kid:jwk.kid}).setSubject('auth0|test').setIssuer('https://'+env.AUTH0_LOGIN_DOMAIN+'/').setAudience('site').setIssuedAt().setExpirationTime('5m').sign(privateKey);
   const roles=[{id:'rol_A',name:'角色 A',description:''},{id:'rol_B',name:'角色 B',description:''}];
@@ -63,9 +63,9 @@ test('JWT role membership is stable until renewal while permission grants are re
 
 test('Auth0 roles are paginated and no user/role tables or permission writes are needed for the directory', async () => {
   let calls=0;
-  const directory=createDirectory({AUTH0_DOMAIN:'directory.eu.auth0.com',AUTH0_MANAGEMENT_CLIENT_ID:'directory',AUTH0_MANAGEMENT_CLIENT_SECRET:'fixture'}, async input=>{
+  const directory=createDirectory({AUTH0_ORGANIZATION_ID:'org_Eastmoney',AUTH0_DOMAIN:'directory.eu.auth0.com',AUTH0_MANAGEMENT_CLIENT_ID:'directory',AUTH0_MANAGEMENT_CLIENT_SECRET:'fixture'}, async input=>{
     const url=new URL(input); if(url.pathname==='/oauth/token')return Response.json({access_token:'fixture'});
-    calls++;assert.equal(url.pathname,'/api/v2/roles');return Response.json(url.searchParams.get('page')==='0'?Array.from({length:100},(_,i)=>({id:`rol_R${i}`,name:`Role ${i}`})):[]);
+    calls++;assert.equal(url.pathname,'/api/v2/roles');return Response.json(url.searchParams.get('page')==='0'?Array.from({length:100},(_,i)=>({id:`rol_R${i}`,name:`Role ${i}`,owner_id:'org_Eastmoney'})):[]);
   });
   assert.equal((await directory.roles()).length,100);assert.equal((await directory.roles()).length,100);assert.equal(calls,2);
 });

@@ -6,7 +6,7 @@ const legacyId = '12345678-1234-1234-1234-123456789abc';
 function context(user = {}, { canRedirect = true, client = 'eastmoney' } = {}) {
   const calls = { denied: [], redirected: [], claims: [] };
   return {
-    event: { connection: {name:'eastmoney-email'}, authorization:{roles:[]}, client: { client_id: client }, secrets: { EASTMONEY_CLIENT_ID: 'eastmoney' },
+    event: { organization: {id:'org_6yvoRRCkzk3eGkBS'}, connection: {name:'eastmoney-email'}, authorization:{roles:[]}, client: { client_id: client }, secrets: { EASTMONEY_CLIENT_ID: 'eastmoney' },
       user: { user_id: 'auth0|new-account', email: 'new@18.cn', email_verified: false, ...user } },
     api: { access: { deny: (message) => calls.denied.push(message) },
       redirect: { canRedirect: () => canRedirect, sendUserTo: (...args) => calls.redirected.push(args) },
@@ -89,13 +89,13 @@ test('role IDs and profile are signed at login; refreshed role membership gets n
     if(String(url).endsWith('/oauth/token'))return Response.json({access_token:'roles-token',expires_in:86400});
     assert.ok(String(url).includes('/api/v2/roles?'));
     assert.equal(options.headers.Authorization,'Bearer roles-token');
-    return Response.json([{id:'rol_A',name:'Admin'},{id:'rol_B',name:'Reviewer'}]);
+    return Response.json([{id:'rol_eoDAJuWbdjwEzEln',name:'Admin'},{id:'rol_dUEQWoUpRu5kzcqi',name:'Reviewer'}]);
   });
   f.event.authorization.roles=['Admin'];await action.onExecutePostLogin(f.event,f.api);
-  assert.deepEqual(claims.get('https://eastmoney.hasbai.xyz/roles'),[{id:'rol_A',name:'Admin'}]);
+  assert.deepEqual(claims.get('https://eastmoney.hasbai.xyz/roles'),[{id:'rol_eoDAJuWbdjwEzEln',name:'Admin'}]);
   assert.deepEqual(claims.get('https://eastmoney.hasbai.xyz/profile'),{name:'测试账号',department:'测试',picture:'',connection:'eastmoney-email',verified:true});
   f.event.authorization.roles=['Reviewer'];await action.onExecutePostLogin(f.event,f.api);
-  assert.deepEqual(claims.get('https://eastmoney.hasbai.xyz/roles'),[{id:'rol_B',name:'Reviewer'}]);
+  assert.deepEqual(claims.get('https://eastmoney.hasbai.xyz/roles'),[{id:'rol_dUEQWoUpRu5kzcqi',name:'Reviewer'}]);
   assert.equal(calls.filter(url=>url.endsWith('/oauth/token')).length,1);
   assert.equal(calls.filter(url=>url.includes('/api/v2/roles?')).length,2);
 });

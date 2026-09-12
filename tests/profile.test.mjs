@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createProfileService, readProfileJson } from '../src/lib/server/profile.ts';
 
-const config = { AUTH0_DOMAIN: 'example.auth0.com', AUTH0_CLIENT_ID: 'login-client', AUTH0_MANAGEMENT_CLIENT_ID: 'manager', AUTH0_MANAGEMENT_CLIENT_SECRET: 'test-service-secret' };
+const config = { AUTH0_DOMAIN: 'example.auth0.com', AUTH0_ORGANIZATION_ID: 'org_Eastmoney', AUTH0_CLIENT_ID: 'login-client', AUTH0_MANAGEMENT_CLIENT_ID: 'manager', AUTH0_MANAGEMENT_CLIENT_SECRET: 'test-service-secret' };
 const identity = { auth0Id: 'auth0|me', email: 'me@18.cn' };
 const user = { user_id: 'auth0|me', email: 'me@18.cn', email_verified: true, name: '原姓名', identities: [{ connection: 'eastmoney-email', access_token: 'must-not-be-returned' }] };
 function fixture({ account = user, respond } = {}) {

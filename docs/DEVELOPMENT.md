@@ -65,3 +65,7 @@ Worker Secret：`AUTH0_CLIENT_SECRET`、`AUTH0_MANAGEMENT_CLIENT_SECRET`、`SESS
 ## 身份接口限流恢复
 
 Auth0 Management API 的账号、角色读取及管理 token 获取遇到 429 时，在当前请求内按 `Retry-After` / `X-RateLimit-Reset` 退避并加入抖动；最多重试四次，总等待不超过十秒。上游要求的等待超出预算时直接返回可重试的 `IDENTITY_RATE_LIMITED`，不提前再次冲击上游。此退避仅用于实际资料、目录及角色管理操作；普通业务准入不调用 Management API。账号状态与角色成员关系在 Auth0 签发新 token 时检查；既有 JWT 按其有效期使用，角色权限配置仍逐请求查表。修改资料、角色等写操作不自动重放。日志只记阶段、次数、等待时长和状态码，不记录凭据或个人信息。
+
+## Eastmoney 组织隔离
+
+网站与 MCP 用户登录绑定 `org_6yvoRRCkzk3eGkBS`，Gateway 校验 `org_id`；账号目录和成员角色使用本组织范围。当前套餐不支持 M2M Organizations，Quant 保留单独 Choice 白名单。应用盘点、迁移、套餐限制与回退见 [组织与应用边界](AUTH0_ORGANIZATIONS.md)。

@@ -6,7 +6,7 @@ import { PERMISSION_DEFINITIONS } from '../permissions.ts';
 import type { SiteAuthorization } from '../identity.ts';
 
 type Identity = { email: string; auth0Id: string | null; authorization?: SiteAuthorization };
-type Config = Pick<Env, 'AUTH0_DOMAIN' | 'AUTH0_CLIENT_ID' | 'AUTH0_MANAGEMENT_CLIENT_ID' | 'AUTH0_MANAGEMENT_CLIENT_SECRET'>;
+type Config = Pick<Env, 'AUTH0_DOMAIN' | 'AUTH0_CLIENT_ID' | 'AUTH0_ORGANIZATION_ID' | 'AUTH0_MANAGEMENT_CLIENT_ID' | 'AUTH0_MANAGEMENT_CLIENT_SECRET'>;
 
 export class ProfileError extends Error {
   status: number;
@@ -95,7 +95,7 @@ export function createProfileService(config: Config, identity: Identity | null, 
   async function list(suffix: string): Promise<unknown[]> {
     const result: unknown[] = [];
     for (let page = 0; page < 10; page++) {
-      const rows = await request(`${userPath}/${suffix}?per_page=100&page=${page}`);
+      const rows = await request(`organizations/${config.AUTH0_ORGANIZATION_ID}/members/${encodeURIComponent(userId)}/${suffix}?per_page=100&page=${page}`);
       if (!Array.isArray(rows)) throw new ProfileError(503, '账号权限暂时无法读取');
       result.push(...rows);
       if (rows.length < 100) return result;
