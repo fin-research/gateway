@@ -55,3 +55,17 @@ Eastmoney 在现有 `hasbai.eu.auth0.com` 租户内使用组织 `org_6yvoRRCkzk3
 保留 `.auth0-deploy/organization-before`、`database-before` 和 `organization-members.json` 受限快照。回退先恢复必要旧角色分配和应用配置、MCP authorize 参数，再恢复 Gateway/Action 版本，按依赖顺序执行。旧 profile 应用可从快照恢复 grant_types/scopes；不需要重建账号或 Secret。不要把整份旧租户导入覆盖 Hasbai 的后续改动。
 
 依据：[Organizations 与应用行为](https://auth0.com/docs/manage-users/organizations/configure-organizations/define-organization-behavior)、[Organizations 概览](https://auth0.com/docs/manage-users/organizations/organizations-overview)、[Management API schema](https://auth0.com/docs/oas/management/v2/management-api-oas.json)。本次按实际 API 回读校验套餐能力和连接/角色关联。
+
+## 本次验收记录
+
+2026-09-12：Gateway `pnpm check` 62 项通过，`pnpm deploy:dry` 通过；32 项真实 SvelteKit/Data handler 联调通过（外部服务模拟）。生产发布 `f949f3f1-bc75-4211-a612-70d404f8c8ae`，组织登录 Action 版本 `e17cfe2e-7ed1-41a6-ab0d-e3978ac68856` 已回读为当前绑定版本。
+
+`test@18.cn` 的程序化网页登录及 70 项匿名/登录只读探针全部通过；Data MCP 23 工具、health 和错误输入检查通过。完整 Cloudflare managed OAuth + Data 逐用户组织授权通过，门户列出 27 工具，`data_health` 和 `research_search` 实际调用成功；后台仍为 Ready，23 个 Data 工具。此次回读的 lastSuccessfulSync 仍为原有 2026-09-09 15:51:37，不将目录时间误称为本次新同步。
+
+Quant 实际申请 token 成功，Choice 缺参请求返回 422，个人资料/CAMEL/MCP 均返回 403。退役 profile client 实际申请 token 返回 403 `unauthorized_client`。网站登录忽略调用方提供的 Hasbai organization，固定携带 Eastmoney 组织；没有 organization 的 Auth0 静默授权返回 `invalid_request`。带 Hasbai organization 的匿名静默请求只证明未签发 code（`login_required`），跨组织 token 拒绝由签名 JWT 单元测试覆盖，未冒用真实 Hasbai 账号验证。
+
+配置回读：Eastmoney 9 名成员、专用邮箱连接已启用；该连接只关联网站/MCP 两个客户端。Google 与默认数据库连接保留 `cli`、北极小站两个客户端；Hasbai 组织及其 Google 连接保留。没有修改 Hasbai 成员、角色、连接 options、登录应用或租户级设置。旧 profile 应用只是停用，没有永久删除；已签发的旧管理 token 仍按原有效期自然失效。
+
+后台 Management API 读取曾出现间歇性网络 503；成员迁移仅对读取进行有界重试，写入不自动重放，重复执行先回读已完成状态。维护快照保留在迁移 worktree 的 `.auth0-deploy`，不提交用户 ID/凭据。
+
+最终角色审计逐一读取 9 名成员：原租户级角色分配剩余 0 条，组织内保留原分配 6 条，与迁移前快照一致。完成后再次运行 `pnpm check`，62 项通过。
