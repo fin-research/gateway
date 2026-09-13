@@ -1,9 +1,8 @@
 import { AccessError } from './access.ts';
 import { z } from 'zod';
-import { PERMISSION_CODES, hasPermission, type AuthorizationMode } from '../permissions.ts';
+import { hasPermission, type AuthorizationMode } from '../permissions.ts';
+import { permissionCache } from './permission-cache.ts';
 import { requestPolicy } from './permission-policy.ts';
-import { rolePermissions } from './permission-repository.ts';
-import { withPostgres } from './postgres.ts';
 import type { SiteIdentity } from '../identity.ts';
 import { verifyToken, EMAIL_CLAIM, ROLES_CLAIM, PROFILE_CLAIM } from '../../tokens.ts';
 import { accessToken } from '../../session.ts';
@@ -11,7 +10,7 @@ import { requireSameOrigin } from '../../policy.ts';
 import type { JWTPayload } from 'jose';
 
 export function authorizationMode(value: unknown): AuthorizationMode {
-  if (value !== 'beta-open' && value !== 'enforce') throw new AccessError(503, '权限模式尚未配置完成');
+  if (value !== 'enforce') throw new AccessError(503, '权限模式尚未配置完成');
   return value;
 }
 
@@ -38,7 +37,7 @@ function identityFromPayload(payload: JWTPayload, env: Env, clientId: string = e
 
 }
 
-/** Role membership comes only from the signed JWT. Permission grants are read per request. */
+/** Every protected request checks the Auth0 role grants in the Gateway cache. */
 export async function authorizeRequest(request: Request, env: Env, routeId: string | null, fetcher: typeof fetch = fetch) {
   let policy;
   try { policy = requestPolicy(request, routeId); }
@@ -62,8 +61,7 @@ export async function authorizeRequest(request: Request, env: Env, routeId: stri
   requireSameOrigin(request);
   const mode = authorizationMode(env.AUTHORIZATION_MODE);
   const profile = user.authorization!;
-  const permissions = mode === 'beta-open' ? [...PERMISSION_CODES]
-    : await withPostgres(env.AUTHORIZATION_DB?.connectionString, 'eastmoney-authorization', db => rolePermissions(db, profile.roles.map(role => role.id)));
+  const { permissions } = await permissionCache(env).permissions(profile.roles.map(role => role.id));
   user.authorization = { ...profile, permissions, mode };
   if (policy.permission && !hasPermission(permissions, policy.permission)) throw new AccessError(403, '当前角色无权执行该操作');
   return { user, permissions, directory: undefined };

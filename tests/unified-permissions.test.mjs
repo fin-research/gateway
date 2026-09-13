@@ -28,37 +28,26 @@ test('read and write policies are distinct, and unknown routes/actions and ambig
   for (const mode of [undefined, '', 'legacy', 'open', 'typo']) assert.throws(() => authorizationMode(mode), { status: 503 });
 });
 
-test('JWT role membership is stable until renewal while permission grants are read on every request', async () => {
-  const { privateKey, publicKey } = await generateKeyPair('RS256');
-  const jwk={...await exportJWK(publicKey),alg:'RS256',kid:'jwt-roles'};
-  const env={AUTH0_LOGIN_DOMAIN:'jwt-roles.auth0.com',AUTH0_AUDIENCE:'site',AUTH0_ORGANIZATION_ID:'org_Eastmoney',AUTH0_CLIENT_ID:'login',AUTHORIZATION_MODE:'enforce',AUTHORIZATION_DB:{connectionString:'postgres://fixture'}};
-  const sign=roles=>new SignJWT({org_id:'org_Eastmoney',azp:'login','https://eastmoney.hasbai.xyz/email':'test@18.cn',
-    'https://eastmoney.hasbai.xyz/roles':roles,'https://eastmoney.hasbai.xyz/profile':{name:'测试账号',department:'测试',picture:'',connection:'eastmoney-email',verified:true}})
-    .setProtectedHeader({alg:'RS256',kid:jwk.kid}).setSubject('auth0|test').setIssuer('https://'+env.AUTH0_LOGIN_DOMAIN+'/').setAudience('site').setIssuedAt().setExpirationTime('5m').sign(privateKey);
-  const roles=[{id:'rol_A',name:'角色 A',description:''},{id:'rol_B',name:'角色 B',description:''}];
-  let granted=['financing.project:read'];let queries=[];
-  const originalFetch=globalThis.fetch;const original={connect:Client.prototype.connect,query:Client.prototype.query,end:Client.prototype.end};
-  globalThis.fetch=async input=>{assert.ok(String(input).endsWith('/jwks.json'),'only JWKS network access is permitted');return Response.json({keys:[jwk]})};
-  Client.prototype.connect=async function(){};Client.prototype.end=async function(){};
-  Client.prototype.query=async function(sql,values){queries.push(values);return {rows:granted.map(permission_code=>({permission_code}))}};
-  const forbidden=async()=>{throw Error('Management API must not be called')};
-  try {
-    const token=await sign(roles);const req=request('/financing/projects','GET',{Authorization:'Bearer '+token});
-    assert.deepEqual((await authorizeRequest(req,env,'/financing/projects',forbidden)).permissions,granted);
-    assert.deepEqual(queries.at(-1),[['rol_A','rol_B']]);
-    granted=[];await assert.rejects(authorizeRequest(req,env,'/financing/projects',forbidden),{status:403});
-    granted=['financing.project:read'];assert.deepEqual((await authorizeRequest(req,env,'/financing/projects',forbidden)).user.authorization.roles,roles);
-    const renewed=await sign([{id:'rol_C',name:'角色 C'}]);
-    await authorizeRequest(request('/financing/projects','GET',{Authorization:'Bearer '+renewed}),env,'/financing/projects',forbidden);
-    assert.deepEqual(queries.at(-1),[['rol_C']]);assert.equal(queries.length,4);
-    env.AUTHORIZATION_MODE='beta-open';const before=queries.length;
-    assert.deepEqual((await authorizeRequest(req,env,'/financing/projects',forbidden)).permissions,PERMISSION_CODES);assert.equal(queries.length,before);
-    const noRoles=await sign([]);assert.deepEqual((await authorizeRequest(request('/financing/projects','GET',{Authorization:'Bearer '+noRoles}),env,'/financing/projects',forbidden)).user.authorization.roles,[]);
-    for(const roleClaim of [undefined,['admin'],[{id:'invalid',name:'bad'}],[roles[0],roles[0]]]){
-      const invalid=await sign(roleClaim);await assert.rejects(authorizeRequest(request('/financing/projects','GET',{Authorization:'Bearer '+invalid}),env,'/financing/projects',forbidden),{status:401});
-    }
-    assert.equal((await authorizeRequest(request('/market-briefing'),env,'/market-briefing',forbidden)).user,null);
-  } finally {globalThis.fetch=originalFetch;Object.assign(Client.prototype,original)}
+test('signed roles use current cached grants, never token permissions or database; cache refresh revokes existing sessions', async t => {
+  const { fixture } = await import('./helpers/fixture.mjs');
+  const f = await fixture(t);
+  t.mock.method(Client.prototype, 'connect', async () => { throw new Error('authorization must not query Postgres'); });
+  const token = await f.signed({permissions:['financing.project:delete']});
+  const req=f.request('/financing/projects',{token});
+  await f.updateGrants(['financing.project:read']);
+  assert.deepEqual((await authorizeRequest(req,f.env,'/financing/projects')).permissions,['financing.project:read']);
+  await f.updateGrants([]);
+  await assert.rejects(authorizeRequest(req,f.env,'/financing/projects'),{status:403});
+  await f.updateGrants(['financing.project:read']);
+  for(const roles of [[],[{id:'rol_Unknown',name:'unknown'}]]) {
+    await assert.rejects(authorizeRequest(f.request('/financing/projects',{token:await f.signed({'https://eastmoney.hasbai.xyz/roles':roles})}),f.env,'/financing/projects'),{status:403});
+  }
+  for(const roles of [undefined,['admin'],[{id:'invalid',name:'bad'}],[{id:'rol_A',name:'A'},{id:'rol_A',name:'A'}]]) {
+    await assert.rejects(authorizeRequest(f.request('/financing/projects',{token:await f.signed({'https://eastmoney.hasbai.xyz/roles':roles})}),f.env,'/financing/projects'),{status:401});
+  }
+  f.env.AUTHORIZATION_MODE='beta-open';
+  await assert.rejects(authorizeRequest(req,f.env,'/financing/projects'),{status:503});
+  assert.equal(f.calls.auth0.length,0);
 });
 
 test('Auth0 roles are paginated and no user/role tables or permission writes are needed for the directory', async () => {
@@ -86,9 +75,9 @@ test('client navigation and legacy workbench aliases require the same resource p
  ]) assert.equal(requestPolicy(request(path),route).permission,permission);
 });
 
-test('permission reads and role configuration cannot fall back to the cached business binding', async () => {
+test('runtime authorization and role view have no database authorization fallback', async () => {
  const authorization=await readFile(new URL('../src/lib/server/authorization.ts',import.meta.url),'utf8');
  const configuration=await readFile(new URL('../src/identity-service.ts',import.meta.url),'utf8');
- assert.match(authorization,/AUTHORIZATION_DB/);assert.doesNotMatch(authorization,/env\.HYPERDRIVE/);
- assert.match(configuration,/AUTHORIZATION_DB/);assert.doesNotMatch(configuration,/getDatabase|env\.HYPERDRIVE/);
+ assert.doesNotMatch(authorization,/AUTHORIZATION_DB|withPostgres|env\.HYPERDRIVE/);
+ assert.doesNotMatch(configuration,/AUTHORIZATION_DB|withPostgres|saveRoleConfiguration|env\.HYPERDRIVE/);
 });

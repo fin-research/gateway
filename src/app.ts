@@ -5,6 +5,7 @@ import { canonicalPath, dashboardRoute, requireSameOrigin } from './policy.ts';
 import { forwardedRequest } from './forward.ts';
 import { login, callback, logout } from './session.ts';
 import { dataRequest } from './data.ts';
+import { permissionCache } from './lib/server/permission-cache.ts';
 import { profileRequest } from './identity-service.ts';
 import { publicSession } from './lib/identity.ts';
 import { Hono } from 'hono';
@@ -31,6 +32,14 @@ app.all('*', async c => {
     const path = canonicalPath(request);
     const route = dashboardRoute(request);
     const { user } = await authorizeRequest(request, env, route);
+    if (path === '/auth/permissions') {
+      const snapshot = await permissionCache(env).permissions(user!.authorization!.roles.map(role => role.id));
+      return Response.json({ roles: user!.authorization!.roles, ...snapshot }, { headers: { 'Cache-Control': 'no-store, private', Vary: 'Cookie, Authorization' } });
+    }
+    if (path === '/auth/permissions/refresh') {
+      const snapshot = await permissionCache(env).refresh();
+      return Response.json({ success: true, updatedAt: snapshot.updatedAt }, { headers: { 'Cache-Control': 'no-store, private' } });
+    }
     if (path === '/auth/session') return Response.json({ ...publicSession(user), enabled: true }, { headers: { 'Cache-Control': 'no-store, private', Vary: 'Cookie, Authorization' } });
     if (path === '/api/profile') return await profileRequest(request, env, user);
     const response = await env.DASHBOARD.fetch(forwardedRequest(request, { version: 1, user, choice: { status: 401 } }));

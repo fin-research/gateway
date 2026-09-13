@@ -11,7 +11,7 @@ Eastmoney 在现有 `hasbai.eu.auth0.com` 租户内使用组织 `org_6yvoRRCkzk3
 | eastmoney quant gateway | 保留；只有 Gateway API 的 `data.choice:read`，没有 Management API 权限 |
 | eastmoney identity management | 保留；Gateway 资料与组织目录；`read:users`、`update:users`、`read:roles`、`read:organization_members`、`read:organization_member_roles` |
 | eastmoney signup profile | 保留；Hosted Form 保存新账号资料；仅 `update:users` |
-| eastmoney-login-roles | 保留；登录 Action 查询角色 ID；仅 `read:roles` |
+| eastmoney-login-roles | 保留；登录 Action 查询角色 ID；`read:roles`、`create:organization_member_roles` |
 | eastmoney dashboard profile | 退役；`grant_types=[]`、Management API `scope=[]`，标记 `lifecycle=retired`。保留应用 ID 供可逆回退，没有永久删除 |
 | cli | 共用 Deploy CLI 管理工具；当前审计也依赖它。保留，不合并到业务运行时凭据 |
 | All Applications | Auth0 系统管理上下文；无普通 app_type，留存日志为后台管理事件，未修改 |
@@ -69,3 +69,5 @@ Quant 实际申请 token 成功，Choice 缺参请求返回 422，个人资料/C
 后台 Management API 读取曾出现间歇性网络 503；成员迁移仅对读取进行有界重试，写入不自动重放，重复执行先回读已完成状态。维护快照保留在迁移 worktree 的 `.auth0-deploy`，不提交用户 ID/凭据。
 
 最终角色审计逐一读取 9 名成员：原租户级角色分配剩余 0 条，组织内保留原分配 6 条，与迁移前快照一致。完成后再次运行 `pnpm check`，62 项通过。
+
+2026-09-13 权限方案更新：组织成员统一增加 authenticated，全部本站角色在 Auth0 授予全部 Gateway 业务权限；不再使用 beta-open。新用户登录自动补基础角色；运行时角色授权来自 Gateway 的 1 小时 Cache API JSON 缓存。上文“不补权限”和 permission 表键为 9 月 12 日迁移历史，现行规则见 [开发与交付](DEVELOPMENT.md#auth0-rbac-与授权缓存)。

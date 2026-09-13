@@ -11,3 +11,4 @@ clientGrants:
     audience: https://hasbai.eu.auth0.com/api/v2/
     scope:
       - read:roles
+      - create:organization_member_roles

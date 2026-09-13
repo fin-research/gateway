@@ -38,13 +38,11 @@ exports.onContinuePostLogin = async (event, api) => {
   api.access.deny('请完成邮箱验证后重新登录');
 };
 
-// Auth0's login event supplies role names; the permission table uses stable role
-// IDs. Resolve the catalogue only during login/token issuance, using a dedicated
-// read:roles client. Business requests never call this API.
+// Resolve stable organization role IDs at issuance and persist the baseline
+// role in Auth0. Business requests only consume signed RBAC permissions.
 async function roleClaims(event, api) {
-  const names = event.authorization?.roles || [];
+  const names = [...(event.authorization?.roles || [])];
   if (!Array.isArray(names) || names.some(name => typeof name !== 'string')) throw new Error('roles');
-  if (!names.length) return [];
   const domain = event.secrets.ROLES_DOMAIN;
   const clientId = event.secrets.ROLES_CLIENT_ID;
   const secret = event.secrets.ROLES_CLIENT_SECRET;
@@ -66,14 +64,30 @@ async function roleClaims(event, api) {
     if (ttl > 0) api.cache?.set(cacheKey, token, { ttl });
   }
   const matched = [];
+  let baseline;
   for (let page = 0; page < 10; page++) {
     const rows = await json(`${origin}/api/v2/roles?per_page=100&page=${page}`, { headers: { Authorization: `Bearer ${token}` } });
     if (!Array.isArray(rows)) throw new Error('catalogue');
+    for (const role of rows) {
+      if (role.name === 'authenticated' && role.owner_id === ORGANIZATION_ID && /^rol_[A-Za-z0-9]+$/.test(role.id)) baseline = role;
+    }
     for (const role of rows) if (names.includes(role.name) && (role.owner_id === ORGANIZATION_ID || LEGACY_ROLE_IDS.has(role.id))) {
       if (!/^rol_[A-Za-z0-9]+$/.test(role.id) || typeof role.name !== 'string') throw new Error('role');
       matched.push({ id: role.id, name: role.name });
     }
     if (rows.length < 100) break;
+  }
+  if (!baseline) throw new Error('baseline role missing');
+  if (!names.includes('authenticated')) {
+    const response = await fetch(`${origin}/api/v2/organizations/${ORGANIZATION_ID}/members/${encodeURIComponent(event.user.user_id)}/roles`, {
+      method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(5000),
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roles: [baseline.id] }),
+    });
+    await response.body?.cancel();
+    if (!response.ok) throw new Error('baseline assignment failed');
+    names.push('authenticated');
+    matched.push({ id: baseline.id, name: baseline.name });
   }
   if (matched.length !== new Set(names).size || matched.length > 50) throw new Error('unresolved role');
   return matched;

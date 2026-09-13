@@ -53,7 +53,7 @@ export const PERMISSION_DEFINITIONS = [
   ['account.profile:read', '个人信息', '读取本人 Auth0 资料和应用权限'],
   ['account.profile:update', '修改个人信息', '修改本人资料或请求密码重置'],
   ['auth.permission:read', '角色权限查询', '读取 Auth0 角色及应用权限配置'],
-  ['auth.permission:update', '角色权限配置', '保存 Auth0 角色的应用权限'],
+  ['auth.permission:update', '刷新授权缓存', '从 Auth0 更新 Gateway 的角色权限缓存'],
   ['data.resource:read', '数据服务', '读取 Data REST 数据资源'],
   ['data.graphql:read', '数据 GraphQL', '查询 Data GraphQL 资源'],
   ['data.choice:read', 'Choice 数据', '查询 Choice 指标'],

@@ -4,6 +4,7 @@ import { AuthTestError, SITE_ORIGIN, createHttpSession, loginTestAccount, readAu
 // GET only. Missing-record probes verify the authorization/validation boundary
 // without querying paid Choice data, generating AI, or mutating business state.
 export const ACCESS_PROBES = [
+  ['login', '/auth/permissions', [200]],
   ['public', '/market-briefing', [200]],
   ['public', '/market-briefing/text', [200]],
   ['public', '/api/market-report', [400]],
@@ -76,6 +77,20 @@ async function main() {
     console.log(JSON.stringify({ identity: config.email, scope, path: new URL(path, SITE_ORIGIN).pathname,
       granted: permitted, status: response.status, passed, ...(failureDetail ? { detail: failureDetail } : {}) }));
     if (!passed) failures.push(`test-account ${scope}`);
+  }
+  if (process.argv.includes('--refresh-permissions')) {
+    const response = await fetch(SITE_ORIGIN + '/auth/permissions/refresh', {
+      method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(60000),
+      headers: { Origin: SITE_ORIGIN, Cookie: session.cookies.header(SITE_ORIGIN + '/auth/permissions/refresh') },
+    });
+    const result = JSON.parse(await boundedText(response));
+    if (response.status !== 200 || result.success !== true || !Number.isFinite(result.updatedAt)) failures.push('permission cache refresh');
+    const own = await session.request(SITE_ORIGIN + '/auth/permissions', { followRedirects: false });
+    const snapshot = JSON.parse(own.text);
+    const hasBaseline = snapshot.roles?.some(role => role.name === 'authenticated');
+    if (own.status !== 200 || !hasBaseline || snapshot.permissions?.length !== permissions.size) failures.push('cached permission snapshot');
+    console.log(JSON.stringify({ permissionCacheRefresh: response.status, ownPermissions: snapshot.permissions?.length,
+      authenticatedRole: hasBaseline, cacheUpdatedAt: snapshot.updatedAt }));
   }
   for (const path of ['/data/mcp']) {
     let id = 0;
