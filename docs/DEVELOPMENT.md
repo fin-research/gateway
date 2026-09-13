@@ -80,3 +80,13 @@ Auth0 Management API 的账号、角色读取及管理 token 获取遇到 429 �
 - `GET /auth/permissions`：仅登录，返回当前角色合并后的 `permissions` 与 `updatedAt`，读取缓存，不强制同步 Auth0；无权限用户也能查询自己，机器身份拒绝。
 - `POST /auth/permissions/refresh`：同源且具备 `auth.permission:update`，同步 Auth0 并更新当前节点缓存；不修改 Auth0 配置。权限响应一律 private/no-store。
 - Dashboard 个人页和管理角色视图复用 `PermissionExplorer`，按 scope/resource/action 分级展示。个人“刷新我的权限”重新读取缓存；“刷新登录角色”走标准授权码流程更新 JWT 角色。角色管理页面仅链接 Auth0 编辑并提供缓存刷新，不保留本地授权编辑器。
+
+### 2026-09-13 发布验收
+
+实现提交：Gateway `4bc18c1`、Dashboard `908e3f0`，均已合入并回读远端 main。Gateway 发布版本 `21b50794-9945-42fe-8a24-a8734ee25a98`；Dashboard 自动部署未反映到线上时，使用同一已验证提交手动发布，版本 `964ed834-b766-4ed5-a242-797a6852a826`。登录 Action 当前绑定版本 `f9e468ae-0045-4e54-8960-c1911cfe536a`；首次发布 503 后先回读确认仅有草稿，再重试并验证绑定。
+
+- Auth0 回读：9 名组织成员均有 authenticated，5 个本站角色各具备 58 项 Gateway 权限。API RBAC 开启、token dialect 为 access_token，不附加完整 permissions。
+- Gateway check 65 项通过、deploy dry-run 通过；Dashboard typecheck、536 项测试与 build 通过；真实 SvelteKit/Data handler 联调 32 项通过（外部服务模拟）。
+- test@18.cn 真实 HTTP 登录和 72 项匿名/用户访问探针全部通过；手动缓存刷新 HTTP 200，个人缓存返回 58 权限和 authenticated。Data MCP 23 工具、health 及错误输入检查通过。
+- Quant 真实机器 token 获取成功；Choice 缺参 422，profile/CAMEL/MCP 全部 403。个人页、角色页 HTTP 200，线上 HTML 包含 scope/resource/action 分层组件和缓存刷新入口，无旧权限编辑表单。
+- 按规范未使用浏览器、截图或人工视觉验收。缓存跨节点传播与一小时过期语义以 Cache API 契约及单元测试覆盖，未等待一小时做线上到期实验。
