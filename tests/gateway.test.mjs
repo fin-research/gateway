@@ -73,7 +73,7 @@ test('Gateway normalizes identity, strips all caller credentials and requires si
   // Existing signed tokens retain their role/account snapshot until token renewal.
   f.updateProfile({ blocked: true }); assert.equal((await gatewayRequest(request, f.env)).status, 200);
   assert.equal(f.calls.auth0.length, 0, 'ordinary requests must not read Management API');
-  const legacy = await f.signed({'https://eastmoney.hasbai.xyz/roles': undefined});
+  const legacy = await f.signed({user:{...f.userClaims,roles:undefined}});
   assert.equal((await gatewayRequest(f.request('/api/credit', {token:legacy}), f.env)).status,401);
 
 });

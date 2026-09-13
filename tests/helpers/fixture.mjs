@@ -38,14 +38,15 @@ export async function fixture(t) {
     throw new Error('Unexpected outbound request');
   };
   t.after(() => { globalThis.fetch = original; });
+  const userClaims = { roles: [{id:'rol_Authenticated',name:'authenticated'}], profile: {name:'测试账号',department:'测试',picture:'',connection:'eastmoney-email',verified:true}, email: 'test@18.cn' };
   async function signed(overrides = {}, kind = 'access') {
     const now = Math.floor(Date.now() / 1000);
     return new SignJWT({ iss: `https://${env.AUTH0_LOGIN_DOMAIN}/`, aud: kind === 'access' ? env.AUTH0_AUDIENCE : env.AUTH0_CLIENT_ID,
       org_id: env.AUTH0_ORGANIZATION_ID, sub: 'auth0|test', iat: now, exp: now + 300, azp: env.AUTH0_CLIENT_ID,
-      'https://eastmoney.hasbai.xyz/roles': [{id:'rol_Authenticated',name:'authenticated'}], 'https://eastmoney.hasbai.xyz/profile': {name:'测试账号',department:'测试',picture:'',connection:'eastmoney-email',verified:true}, 'https://eastmoney.hasbai.xyz/email': 'test@18.cn', ...overrides }).setProtectedHeader({ alg: 'RS256', kid: jwk.kid }).sign(privateKey);
+      user: userClaims, ...overrides }).setProtectedHeader({ alg: 'RS256', kid: jwk.kid }).sign(privateKey);
   }
   const request = (path, { token, method = 'GET', headers = {}, body } = {}) => new Request(env.SITE_ORIGIN + path, {
     method, headers: { Origin: env.SITE_ORIGIN, ...(token ? { Authorization: 'Bearer ' + token } : {}), ...headers }, body,
   });
-  return { env, calls, signed, jwk, request, cache, async updateGrants(value) { grants = value; await cache.refresh(); }, updateProfile(value) { profile = { ...profile, ...value }; }, intercept(fn) { customFetch = fn; } };
+  return { env, calls, signed, jwk, request, cache, userClaims, async updateGrants(value) { grants = value; await cache.refresh(); }, updateProfile(value) { profile = { ...profile, ...value }; }, intercept(fn) { customFetch = fn; } };
 }

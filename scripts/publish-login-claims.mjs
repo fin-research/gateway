@@ -6,7 +6,7 @@ const apply = process.argv.includes('--apply');
 const code = await readFile(new URL('../auth0/actions/eastmoney-login.cjs', import.meta.url), 'utf8');
 const path = `actions/actions/${LOGIN_ACTION_ID}`;
 const action = management('get', path);
-const expectedPreviousHash = '498bfa2dbe100cc8a0bd194fdc50ce6b2bb4f60b470b2f383af847dca31a320c';
+const expectedPreviousHash = '22910cd9bda1b473955170a33618ced78878bab887072a8afdff6c1ef8057846';
 if (createHash('sha256').update(action.deployed_version?.code ?? '').digest('hex') !== expectedPreviousHash && action.code !== code) throw new Error('The deployed Action changed since this fix was prepared; review it before publishing');
 if (action.name !== 'eastmoney login claims' || action.runtime !== 'node22') throw new Error('Unexpected login Action');
 if (!action.all_changes_deployed && action.code !== code) throw new Error('The Action has an unrelated unpublished draft; preserve it before publishing');
@@ -29,7 +29,8 @@ if (!apply) process.exit(0);
 // Do not redirect new registrations until the public notice page is online.
 const page = await fetch('https://eastmoney.hasbai.xyz/auth/verify-email', { redirect: 'manual', signal: AbortSignal.timeout(15000) });
 if (page.status !== 200 || !(await page.text()).includes('我已验证，继续登录')) throw new Error('Deploy and verify the email notice page before publishing the Action');
-management('patch', path, { code, secrets });
+// This rollout changes claim names only; leave all existing Action secrets untouched.
+management('patch', path, { code });
 const version = management('post', `${path}/deploy`);
 const updated = management('get', path);
 const bindings = management('get', 'actions/triggers/post-login/bindings');

@@ -20,15 +20,18 @@ exports.onExecutePostLogin = async (event, api) => {
   let roles;
   try { roles = await roleClaims(event, api); }
   catch { return api.access.deny('登录角色读取失败，请稍后重试'); }
-  api.accessToken.setCustomClaim('https://eastmoney.hasbai.xyz/roles', roles);
-  api.accessToken.setCustomClaim('https://eastmoney.hasbai.xyz/profile', {
-    name: String(event.user.name || event.user.email).slice(0, 200),
-    department: String(event.user.user_metadata?.department || '').trim().slice(0, 100),
-    picture: String(event.user.picture || '').slice(0, 2048),
-    connection: 'eastmoney-email', verified: true,
+  // Auth0 reserves the top-level "roles" claim; nested application fields need no URL namespace.
+  api.accessToken.setCustomClaim('user', {
+    roles,
+    profile: {
+      name: String(event.user.name || event.user.email).slice(0, 200),
+      department: String(event.user.user_metadata?.department || '').trim().slice(0, 100),
+      picture: String(event.user.picture || '').slice(0, 2048),
+      connection: 'eastmoney-email', verified: true,
+    },
+    email: String(event.user.email).trim().toLowerCase(),
   });
   api.idToken.setCustomClaim('eastmoney_user_id', event.user.user_id);
-  api.accessToken.setCustomClaim('https://eastmoney.hasbai.xyz/email', String(event.user.email).trim().toLowerCase());
 };
 
 exports.onContinuePostLogin = async (event, api) => {

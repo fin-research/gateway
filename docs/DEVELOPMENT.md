@@ -37,11 +37,19 @@ Worker Secret：`AUTH0_CLIENT_SECRET`、`AUTH0_MANAGEMENT_CLIENT_SECRET`、`SESS
 
 临时 `__Host-eastmoney_login` 包含 PKCE verifier、state、nonce，继续用 `SESSION_SECRET` 加密，有效期 10 分钟。旧 JWE 会话需要重新登录；Gateway 在后续 HTTP 响应清除旧五段式会话和已退役的 `credit-session`，退出也清理授信旧 Cookie。清理不覆盖回调新签发的 JWT，不改动授信对话存储。包含 Cookie 清理的响应禁止缓存。
 
+### 自定义字段名称
+
+Auth0 登录 Action 将业务信息签入一个短的 `user` claim：`user.roles` 保存角色 ID/名称，`user.profile` 保存现有资料，`user.email` 保存邮箱。JWT 仍由 Auth0 签发，Gateway 原样保存，不重签、不删改 token。自定义字段不再带 URL 前缀；顶层 `roles` 是 Auth0 受限 claim，因此放在 `user` 内，不覆盖 OIDC 标准 `profile` 字段。
+
+先发布兼容读取两种字段结构的 Gateway，再发布 Auth0 Action。现有带 URL 字段的 token 可继续使用至原到期时间，重新登录后取得短字段。存在 `user` 时整体以它为准，缺字段或格式错误会拒绝，不从旧字段拼补。机器 token 和非本站应用保持原结构。
+
+字段规则见 [Auth0 Custom Claims](https://auth0.com/docs/secure/tokens/json-web-tokens/create-custom-claims)。
+
 ## Auth0 配置
 
 按共享 AUTH 使用显式资源 `auth0:export` / `auth0:plan` / `auth0:apply`；默认禁止删除、不导出 Secret。`scripts/prepare-gateway-tenant.mjs` 从受限导出生成本次 web callback、API audience 与 Quant 机器应用配置；先审阅计划再 apply。保留现有角色、角色成员、注册 Form 和迁移账号例外。
 
-登录 Action 为 `auth0/actions/eastmoney-login.cjs`，给本站 API access token 添加 namespaced email、roles 与 profile；Auth0 原生 `sub` 即用户主键。Action 在登录时从事件取得角色名称，通过专用 `eastmoney-login-roles` 机器应用解析稳定角色 ID，并给未持有 `authenticated` 的本组织用户增量分配基础角色；该应用仅有 `read:roles` 与 `create:organization_member_roles`。声明配置见 `auth0/login-role-client.yaml`；`scripts/publish-login-claims.mjs` 先 plan、再 `--apply`，受控更新代码及角色查询 Secrets，保留依赖与绑定并回读 deployed version。旧 token 缺少角色声明时要求重新登录。确认 Gateway 切换完成后移除本站应用的旧 Access callback/logout 白名单。
+登录 Action 为 `auth0/actions/eastmoney-login.cjs`，给本站 API access token 添加 `user.email`、`user.roles` 与 `user.profile`；Auth0 原生 `sub` 即用户主键。Action 在登录时从事件取得角色名称，通过专用 `eastmoney-login-roles` 机器应用解析稳定角色 ID，并给未持有 `authenticated` 的本组织用户增量分配基础角色；该应用仅有 `read:roles` 与 `create:organization_member_roles`。声明配置见 `auth0/login-role-client.yaml`；`scripts/publish-login-claims.mjs` 先 plan、再 `--apply`，受控更新代码，保留现有 Secrets、依赖与绑定并回读 deployed version。旧 token 缺少角色声明时要求重新登录。确认 Gateway 切换完成后移除本站应用的旧 Access callback/logout 白名单。
 
 ## 生产切换
 

@@ -100,10 +100,12 @@ test('role IDs and profile are signed at login; refreshed role membership gets n
     return Response.json([baseline,{id:'rol_eoDAJuWbdjwEzEln',name:'Admin'},{id:'rol_dUEQWoUpRu5kzcqi',name:'Reviewer'}]);
   });
   f.event.authorization.roles=['authenticated','Admin'];await action.onExecutePostLogin(f.event,f.api);
-  assert.deepEqual(claims.get('https://eastmoney.hasbai.xyz/roles'),[{id:baseline.id,name:baseline.name},{id:'rol_eoDAJuWbdjwEzEln',name:'Admin'}]);
-  assert.deepEqual(claims.get('https://eastmoney.hasbai.xyz/profile'),{name:'测试账号',department:'测试',picture:'',connection:'eastmoney-email',verified:true});
+  assert.deepEqual([...claims.keys()],['user']);
+  assert.equal(claims.get('user').email,f.event.user.email.toLowerCase());
+  assert.deepEqual(claims.get('user').roles,[{id:baseline.id,name:baseline.name},{id:'rol_eoDAJuWbdjwEzEln',name:'Admin'}]);
+  assert.deepEqual(claims.get('user').profile,{name:'测试账号',department:'测试',picture:'',connection:'eastmoney-email',verified:true});
   f.event.authorization.roles=['authenticated','Reviewer'];await action.onExecutePostLogin(f.event,f.api);
-  assert.deepEqual(claims.get('https://eastmoney.hasbai.xyz/roles'),[{id:baseline.id,name:baseline.name},{id:'rol_dUEQWoUpRu5kzcqi',name:'Reviewer'}]);
+  assert.deepEqual(claims.get('user').roles,[{id:baseline.id,name:baseline.name},{id:'rol_dUEQWoUpRu5kzcqi',name:'Reviewer'}]);
   assert.equal(calls.filter(url=>url.endsWith('/oauth/token')).length,1);
   assert.equal(calls.filter(url=>url.includes('/api/v2/roles?')).length,2);
 });
@@ -136,7 +138,7 @@ test('blocked accounts and other connections cannot mint site role claims',async
     });
     await action.onExecutePostLogin(f.event,f.api);
     assert.equal(writes,1);
-    if(status===204){assert.deepEqual(claims.get('https://eastmoney.hasbai.xyz/roles'),[{id:baseline.id,name:baseline.name}]);assert.equal(f.calls.denied.length,0);}
+    if(status===204){assert.deepEqual(claims.get('user').roles,[{id:baseline.id,name:baseline.name}]);assert.equal(f.calls.denied.length,0);}
     else{assert.equal(f.calls.denied.length,1);assert.equal(claims.size,0);}
     t.mock.restoreAll();
   }

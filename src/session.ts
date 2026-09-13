@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { AccessError } from './lib/server/access.ts';
 import { readProfileJson } from './lib/server/profile.ts';
 import { safeReturnTo } from './lib/auth-navigation.ts';
-import { auth0Issuer, verifyToken, EMAIL_CLAIM } from './tokens.ts';
+import { auth0Issuer, verifyToken, userClaims } from './tokens.ts';
 
 export const SESSION_COOKIE = '__Host-eastmoney_session';
 export const SESSION_MAX_AGE = 24 * 3600;
@@ -101,7 +101,7 @@ export async function callback(request: Request, env: SessionEnv, fetcher: typeo
     const tokens = z.object({ access_token: z.string(), id_token: z.string(), token_type: z.literal('Bearer') }).parse(await readProfileJson(response, 32768));
     const [identity, access] = await Promise.all([verifyToken(tokens.id_token, env, 'id'), verifyToken(tokens.access_token, env)]);
     if (identity.nonce !== transaction.nonce || identity.sub !== access.sub || access.azp !== env.AUTH0_CLIENT_ID
-      || typeof identity.email !== 'string' || identity.email.toLowerCase() !== String(access[EMAIL_CLAIM]).toLowerCase()) throw new AccessError(401, '登录身份不匹配');
+      || typeof identity.email !== 'string' || identity.email.toLowerCase() !== String(userClaims(access).email).toLowerCase()) throw new AccessError(401, '登录身份不匹配');
     const expiry = Math.min(access.exp!, access.iat! + SESSION_MAX_AGE, now() + SESSION_MAX_AGE);
     if (expiry <= now()) throw new AccessError(401, '登录已失效，请重新登录');
     const session = tokens.access_token;

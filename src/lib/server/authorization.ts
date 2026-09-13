@@ -4,7 +4,7 @@ import { hasPermission, type AuthorizationMode } from '../permissions.ts';
 import { permissionCache } from './permission-cache.ts';
 import { requestPolicy } from './permission-policy.ts';
 import type { SiteIdentity } from '../identity.ts';
-import { verifyToken, EMAIL_CLAIM, ROLES_CLAIM, PROFILE_CLAIM } from '../../tokens.ts';
+import { verifyToken, userClaims } from '../../tokens.ts';
 import { accessToken, SESSION_MAX_AGE } from '../../session.ts';
 import { requireSameOrigin } from '../../policy.ts';
 import type { JWTPayload } from 'jose';
@@ -31,11 +31,12 @@ function requireSessionAge(request: Request, payload: JWTPayload): void {
 
 function identityFromPayload(payload: JWTPayload, env: Env, clientId: string = env.AUTH0_CLIENT_ID): SiteIdentity {
   if (!/^auth0\|[^\s]{1,249}$/.test(payload.sub ?? '') || payload.azp !== clientId || payload.gty === 'client-credentials') throw new AccessError(403, '请使用本站用户账号登录');
-  const email = String(payload[EMAIL_CLAIM] ?? '').trim().toLowerCase();
+  const claims = userClaims(payload);
+  const email = String(claims.email ?? '').trim().toLowerCase();
   if (!/^[^@\s]+@18\.cn$/.test(email)) throw new AccessError(403, '请使用 18.cn 邮箱登录');
-  const roles = z.array(z.object({ id: z.string().regex(/^rol_[A-Za-z0-9]+$/), name: z.string().max(200), description: z.string().optional().default('') })).max(50).safeParse(payload[ROLES_CLAIM]);
+  const roles = z.array(z.object({ id: z.string().regex(/^rol_[A-Za-z0-9]+$/), name: z.string().max(200), description: z.string().optional().default('') })).max(50).safeParse(claims.roles);
   const profile = z.object({ name: z.string().max(200), department: z.string().max(100), picture: z.string().max(2048),
-    connection: z.literal('eastmoney-email'), verified: z.literal(true) }).safeParse(payload[PROFILE_CLAIM]);
+    connection: z.literal('eastmoney-email'), verified: z.literal(true) }).safeParse(claims.profile);
   if (!roles.success || !profile.success || new Set(roles.data.map(role => role.id)).size !== roles.data.length) {
     throw new AccessError(401, '登录凭证需更新，请重新登录或刷新登录状态', 'TOKEN_REFRESH_REQUIRED');
   }

@@ -1,9 +1,15 @@
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey, type JWTPayload } from 'jose';
 import { AccessError } from './lib/server/access.ts';
 
-export const ROLES_CLAIM = 'https://eastmoney.hasbai.xyz/roles';
-export const PROFILE_CLAIM = 'https://eastmoney.hasbai.xyz/profile';
-export const EMAIL_CLAIM = 'https://eastmoney.hasbai.xyz/email';
+/** Called only with an Auth0-verified payload. Existing JWTs retain their old claim names until expiry. */
+export function userClaims(payload: JWTPayload): Record<string, unknown> {
+  if (Object.hasOwn(payload, 'user')) {
+    if (!payload.user || typeof payload.user !== 'object' || Array.isArray(payload.user)) throw new AccessError(401, '登录凭证无效');
+    // A present new claim is authoritative; never fill malformed fields from legacy claims.
+    return payload.user as Record<string, unknown>;
+  }
+  return { roles: payload['https://eastmoney.hasbai.xyz/roles'], profile: payload['https://eastmoney.hasbai.xyz/profile'], email: payload['https://eastmoney.hasbai.xyz/email'] };
+}
 const keySets = new Map<string, JWTVerifyGetKey>();
 type TokenConfig = Pick<Env, 'AUTH0_LOGIN_DOMAIN' | 'AUTH0_AUDIENCE' | 'AUTH0_CLIENT_ID' | 'AUTH0_ORGANIZATION_ID' | 'AUTH0_MACHINE_CLIENT_IDS'>;
 

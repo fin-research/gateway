@@ -33,7 +33,7 @@ test('MCP validates identity before CSRF, never admits Quant credentials and req
     assert.equal((await gatewayRequest(new Request(f.env.SITE_ORIGIN + path, { method: 'POST', body: '{}' }), f.env)).status, 401);
     const machine = await f.signed({ gty: 'client-credentials', azp: 'quant', sub: 'quant@clients', scope: 'data.choice:read' });
     assert.equal((await gatewayRequest(f.request(path, { method: 'POST', token: machine, body: '{}' }), f.env)).status, 403);
-    const legacy=await f.signed({'https://eastmoney.hasbai.xyz/roles':undefined});
+    const legacy=await f.signed({user:{...f.userClaims,roles:undefined}});
     assert.equal((await gatewayRequest(f.request(path, { method: 'POST', token: legacy, body: '{}' }), f.env)).status, 401);
   }
   assert.equal(f.calls.data.length, 0);

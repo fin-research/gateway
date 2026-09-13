@@ -2,7 +2,7 @@
 
 Auth0 的本站应用 `eastmoney` 使用自定义登录域 `auth.hasbai.xyz`；管理 API 使用原租户域 `hasbai.eu.auth0.com`。Gateway 拥有 `/auth/login`、`/auth/callback` 和退出流程，Auth0 API audience 为 `https://eastmoney.hasbai.xyz/`。API 不接受 ID token 或 Cloudflare Access JWT。
 
-`actions/eastmoney-login.cjs` 保留 18.cn、迁移账号邮箱绑定、未验证邮箱提示与禁止旧事务 continue 的规则；向 API token 添加 `https://eastmoney.hasbai.xyz/email`，Gateway 用它与当前 Auth0 账号匹配。`sub` 使用 Auth0 原生主键。
+`actions/eastmoney-login.cjs` 保留 18.cn、迁移账号邮箱绑定、未验证邮箱提示与禁止旧事务 continue 的规则；向 API token 添加 `user` 对象，包含 `roles`、`profile`、`email`；Gateway 使用 Auth0 原始签名 token，并通过 `user.email` 核对回调身份。`sub` 使用 Auth0 原生主键。
 
 其余注册 Action、中文主题、Hosted Form 与提示文案保留原业务流程。`eastmoney-signup-profile` 仍只处理新账号 pending 标记；姓名和部门不会授予权限或自动关联业务负责人。
 
