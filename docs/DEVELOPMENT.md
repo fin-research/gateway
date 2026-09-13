@@ -5,7 +5,7 @@ Gateway 是独立 Hono Worker。用户、角色与成员关系属于 Auth0；JWT
 ## 代码与契约
 
 - `src/app.ts`：Hono 路由、公开/保护分流、SvelteKit 数据请求错误协议。
-- `src/tokens.ts` / `session.ts`：固定 Auth0 JWKS、RS256/issuer/audience/azp/时效、PKCE/state/nonce、加密 Cookie、退出。
+- `src/tokens.ts` / `session.ts`：固定 Auth0 JWKS、RS256/issuer/audience/azp/时效、PKCE/state/nonce、标准 JWT 会话 Cookie、加密登录事务、退出。
 - `src/lib/server/authorization.ts`：JWT 角色快照与正常权限检查；授权 JSON 缓存见 `permission-cache.ts`。
 - `src/lib/permissions.ts` / `route-permissions.ts` / `server/permission-policy.ts`：唯一权限目录及路由策略。前两份通过 `scripts/sync-dashboard-contracts.mjs` 同步到 Dashboard 供菜单与导航使用。
 - `src/identity-service.ts`：私有 `IdentityService`，账号目录与角色配置；角色授权只读；编辑统一在 Auth0。
@@ -27,9 +27,15 @@ git diff --check
 
 `pnpm auth:verify` 使用项目组根 `.env` 的 `test@18.cn` 做真实 HTTP 登录和只读探针。`AUTH_TEST_ENV_FILE` 可指定文件；密码只向固定 Auth0 登录 origin 提交一次。验证码/MFA/验证邮箱阻断必须报告，不关闭保护或用机器身份替代。
 
-Worker Secret：`AUTH0_CLIENT_SECRET`、`AUTH0_MANAGEMENT_CLIENT_SECRET`、`SESSION_SECRET`。会话密钥为 32 字节随机值的 Base64URL；仅保存在受限部署文件与 Worker Secret。Gateway 不再绑定权限数据库；使用命名 Cache API `eastmoney-permissions-v1`，不需要 KV、Durable Object 或数据库 migration。
+Worker Secret：`AUTH0_CLIENT_SECRET`、`AUTH0_MANAGEMENT_CLIENT_SECRET`、`SESSION_SECRET`。登录事务密钥为 32 字节随机值的 Base64URL；仅保存在受限部署文件与 Worker Secret。Gateway 不再绑定权限数据库；使用命名 Cache API `eastmoney-permissions-v1`，不需要 KV、Durable Object 或数据库 migration。
 
 生产公开 origin、Auth0 issuer/API audience、用户 client ID 和机器 client ID allowlist 均在 Wrangler vars。机器 scope 限 `data.choice:read`；Quant 凭据只在其未跟踪 `.env` 中。JWT 保存登录时的角色 ID/名称与资料，不含应用有效权限快照；每个受保护请求按 JWT 角色读取缓存授权并检查路由权限，只有 `enforce` 模式可用。角色成员变更在重新登录或个人资料页“刷新登录角色”取得新 token 后生效。
+
+## 浏览器会话 Cookie
+
+`__Host-eastmoney_session` 直接保存 Auth0 签发的 RS256 Access JWT（`header.payload.signature`），不再套 JWE。Gateway 使用 Auth0 JWKS 验签并校验 issuer、API audience、组织、client 与时效；不把可解码的 claims 当作已认证身份。Cookie 保留 Secure、HttpOnly、SameSite=Lax、Path=/，有效期不晚于 JWT exp 且不超过签发后 24 小时；服务端也按已验签 iat 检查 24 小时上限。API Bearer token 沿用其自身 JWT 时效。
+
+临时 `__Host-eastmoney_login` 包含 PKCE verifier、state、nonce，继续用 `SESSION_SECRET` 加密，有效期 10 分钟。旧 JWE 会话需要重新登录；Gateway 在后续 HTTP 响应清除旧五段式会话和已退役的 `credit-session`，退出也清理授信旧 Cookie。清理不覆盖回调新签发的 JWT，不改动授信对话存储。包含 Cookie 清理的响应禁止缓存。
 
 ## Auth0 配置
 

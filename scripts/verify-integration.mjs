@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { fixture } from '../tests/helpers/fixture.mjs';
 import { gatewayRequest } from '../src/app.ts';
+import { SESSION_COOKIE } from '../src/session.ts';
 import { identityService } from '../src/identity-service.ts';
 import { PUBLIC_DATA_RESOURCES } from '../src/policy.ts';
 const dashboard = resolve(process.env.DASHBOARD_CHECKOUT || '../dashboard');
@@ -35,7 +36,9 @@ try {
   } };
   f.env.DATA = { fetch: request => handleGatewayRequest(request, {}) };
   const token = await f.signed();
-  const respond = (path, authenticated = true, init = {}) => gatewayRequest(f.request(path, { ...(authenticated ? { token } : {}), ...init }), f.env);
+  const respond = (path, authenticated = true, init = {}) => gatewayRequest(f.request(path, {
+    ...init, headers: { ...(authenticated ? { Cookie: SESSION_COOKIE + '=' + token } : {}), ...init.headers },
+  }), f.env);
   const payload = async path => { const response = await respond(path); assert.equal(response.status, 200, path); return response.json(); };
   const bootstrap = await payload('/trading-research/research/__data.json?x-sveltekit-invalidated=11');
   assert.equal(bootstrap.type, 'data'); assert.deepEqual(bootstrap.nodes[0].uses.dependencies, ['site:session']);

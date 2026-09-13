@@ -32,7 +32,7 @@ async function unseal(value: string, purpose: string, env: SessionEnv) {
   try { return (await jwtDecrypt(value, secret, { issuer: env.SITE_ORIGIN, audience: purpose, keyManagementAlgorithms: ['dir'], contentEncryptionAlgorithms: ['A256GCM'], requiredClaims: ['iat', 'exp'] })).payload; }
   catch { throw new AccessError(401, '会话已失效，请重新登录'); }
 }
-export async function accessToken(request: Request, env: SessionEnv): Promise<string | null> {
+export async function accessToken(request: Request): Promise<string | null> {
   const authorization = request.headers.get('Authorization');
   if (authorization !== null) {
     if (!/^Bearer [A-Za-z0-9_.-]+$/.test(authorization)) throw new AccessError(401, '登录凭证无效');
@@ -40,14 +40,31 @@ export async function accessToken(request: Request, env: SessionEnv): Promise<st
   }
   const value = readCookie(request, SESSION_COOKIE);
   if (!value) return null;
-  if (value.length > 12000) throw new AccessError(401, '会话无效');
-  const payload = await unseal(value, 'session', env);
-  if (typeof payload.token !== 'string') throw new AccessError(401, '会话无效');
-  return payload.token;
+  if (value.length > 3800 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value)) throw new AccessError(401, '会话无效，请重新登录');
+  // Extraction is not authentication: the caller must verify the Auth0 signature and claims.
+  return value;
 }
 export function clearSession(headers: Headers): void {
-  for (const name of [SESSION_COOKIE, TRANSACTION_COOKIE, 'CF_Authorization']) headers.append('Set-Cookie', cookie(name, '', 0));
+  for (const name of [SESSION_COOKIE, TRANSACTION_COOKIE, 'CF_Authorization', 'credit-session']) headers.append('Set-Cookie', cookie(name, '', 0));
   headers.append('Set-Cookie', 'financing_session=; Path=/financing; Secure; HttpOnly; SameSite=Lax; Max-Age=0');
+}
+
+/** Expire retired host-only cookies when their browser next reaches the Gateway. */
+export function clearLegacyCookies(request: Request, response: Response): Response {
+  if (response.status === 101) return response;
+  const retired = new Set<string>();
+  for (const entry of (request.headers.get('Cookie') ?? '').split(';')) {
+    const [name, value = ''] = entry.trim().split('=');
+    if (name === 'credit-session' || name === SESSION_COOKIE && value.split('.').length === 5) retired.add(name);
+  }
+  const issued = response.headers.getSetCookie();
+  for (const name of retired) if (issued.some(value => value.startsWith(name + '='))) retired.delete(name);
+  if (!retired.size) return response;
+  const result = new Response(response.body, response);
+  for (const name of retired) result.headers.append('Set-Cookie', cookie(name, '', 0));
+  result.headers.set('Cache-Control', 'no-store, private');
+  result.headers.append('Vary', 'Cookie');
+  return result;
 }
 function redirect(location: string, headers = new Headers()) {
   headers.set('Location', location); headers.set('Cache-Control', 'no-store, private'); headers.set('Referrer-Policy', 'no-referrer');
@@ -85,8 +102,9 @@ export async function callback(request: Request, env: SessionEnv, fetcher: typeo
     const [identity, access] = await Promise.all([verifyToken(tokens.id_token, env, 'id'), verifyToken(tokens.access_token, env)]);
     if (identity.nonce !== transaction.nonce || identity.sub !== access.sub || access.azp !== env.AUTH0_CLIENT_ID
       || typeof identity.email !== 'string' || identity.email.toLowerCase() !== String(access[EMAIL_CLAIM]).toLowerCase()) throw new AccessError(401, '登录身份不匹配');
-    const expiry = Math.min(access.exp!, now() + SESSION_MAX_AGE);
-    const session = await seal({ token: tokens.access_token }, 'session', expiry, env);
+    const expiry = Math.min(access.exp!, access.iat! + SESSION_MAX_AGE, now() + SESSION_MAX_AGE);
+    if (expiry <= now()) throw new AccessError(401, '登录已失效，请重新登录');
+    const session = tokens.access_token;
     if (session.length > 3800) throw new AccessError(503, '会话超出安全长度');
     headers.append('Set-Cookie', cookie(SESSION_COOKIE, session, expiry - now()));
     return popup ? popupResult(popup, true, env, headers) : redirect(safeReturnTo(transaction.returnTo), headers);

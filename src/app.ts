@@ -3,7 +3,7 @@ import { accessFailure, AccessError } from './lib/server/access.ts';
 import { loginUrl } from './lib/auth-navigation.ts';
 import { canonicalPath, dashboardRoute, requireSameOrigin } from './policy.ts';
 import { forwardedRequest } from './forward.ts';
-import { login, callback, logout } from './session.ts';
+import { login, callback, logout, clearLegacyCookies } from './session.ts';
 import { dataRequest } from './data.ts';
 import { permissionCache } from './lib/server/permission-cache.ts';
 import { profileRequest } from './identity-service.ts';
@@ -65,4 +65,7 @@ app.onError((error, c) => {
     }
     return accessFailure(error);
 });
-export function gatewayRequest(request: Request, env: Env): Promise<Response> { return Promise.resolve(app.fetch(request, env)); }
+export async function gatewayRequest(request: Request, env: Env): Promise<Response> {
+  const response = await app.fetch(request, env);
+  return new URL(request.url).origin === env.SITE_ORIGIN ? clearLegacyCookies(request, response) : response;
+}

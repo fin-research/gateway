@@ -1,6 +1,6 @@
 # Eastmoney Gateway
 
-Eastmoney 的唯一公网 Hono Worker，集中处理 Auth0 登录、JWT/JWKS、加密会话、当前账号与角色、路由权限、账号目录和角色权限配置。
+Eastmoney 的唯一公网 Hono Worker，集中处理 Auth0 登录、JWT/JWKS、签名 JWT 会话、当前账号与角色、路由权限、账号目录和角色权限配置。
 
 ```
 Browser / Quant → Gateway → Service Binding → Dashboard / Data

@@ -5,7 +5,7 @@ import { permissionCache } from './permission-cache.ts';
 import { requestPolicy } from './permission-policy.ts';
 import type { SiteIdentity } from '../identity.ts';
 import { verifyToken, EMAIL_CLAIM, ROLES_CLAIM, PROFILE_CLAIM } from '../../tokens.ts';
-import { accessToken } from '../../session.ts';
+import { accessToken, SESSION_MAX_AGE } from '../../session.ts';
 import { requireSameOrigin } from '../../policy.ts';
 import type { JWTPayload } from 'jose';
 
@@ -15,10 +15,18 @@ export function authorizationMode(value: unknown): AuthorizationMode {
 }
 
 export async function userIdentity(request: Request, env: Env, optional = false): Promise<SiteIdentity | null> {
-  const token = await accessToken(request, env);
+  const token = await accessToken(request);
   if (!token && optional) return null;
   const payload = await verifyToken(token ?? '', env);
+  requireSessionAge(request, payload);
   return identityFromPayload(payload, env);
+}
+
+function requireSessionAge(request: Request, payload: JWTPayload): void {
+  // Cookie expiry alone is insufficient: a copied JWT must not extend the 24h session.
+  if (!request.headers.has('Authorization') && payload.iat! + SESSION_MAX_AGE <= Date.now() / 1000) {
+    throw new AccessError(401, '会话已失效，请重新登录');
+  }
 }
 
 function identityFromPayload(payload: JWTPayload, env: Env, clientId: string = env.AUTH0_CLIENT_ID): SiteIdentity {
@@ -69,8 +77,9 @@ export async function authorizeRequest(request: Request, env: Env, routeId: stri
 
 /** Data retains its login-only boundary; machine tokens have a separate quota scope. */
 export async function authorizeData(request: Request, env: Env, fetcher: typeof fetch = fetch): Promise<void> {
-  const token = await accessToken(request, env);
+  const token = await accessToken(request);
   const payload = await verifyToken(token ?? '', env);
+  requireSessionAge(request, payload);
   if (payload.gty === 'client-credentials') {
     const allowed = env.AUTH0_MACHINE_CLIENT_IDS.split(',').map(value => value.trim()).filter(Boolean);
     const client = String(payload.azp ?? '');
