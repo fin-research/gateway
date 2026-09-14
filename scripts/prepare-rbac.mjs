@@ -2,6 +2,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { management, AUTH0_DOMAIN } from './lib/auth0-management.mjs';
 import { PERMISSION_DEFINITIONS, PERMISSION_CODES } from '../src/lib/permissions.ts';
+import { GATEWAY_MANAGEMENT_CLIENT_NAME } from './lib/gateway-management-client.mjs';
 const yaml = createRequire(import.meta.resolve('auth0-deploy-cli'))('js-yaml');
 const organization = 'org_6yvoRRCkzk3eGkBS';
 const audience = 'https://eastmoney.hasbai.xyz/';
@@ -29,7 +30,7 @@ let baseline = roles.find(r => r.name === 'authenticated' && r.owner_id === orga
 if (mode === 'plan') {
   const before = yaml.load(await readFile('.auth0-deploy/rbac-before/tenant.yaml', 'utf8'));
   const api = before.resourceServers.find(s => s.identifier === audience);
-  const grant = before.clientGrants.find(g => g.client_id === 'eastmoney-login-roles' && g.audience === `https://${AUTH0_DOMAIN}/api/v2/`);
+  const grant = before.clientGrants.find(g => g.client_id === GATEWAY_MANAGEMENT_CLIENT_NAME && g.audience === `https://${AUTH0_DOMAIN}/api/v2/`);
   if (!api || !grant) throw new Error('Missing API or login client grant');
   const scopes = new Map(api.scopes.map(s => [s.value, s]));
   for (const [value, name, description] of PERMISSION_DEFINITIONS) scopes.set(value, { value, description: `${name}：${description}` });

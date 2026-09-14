@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { AUTH0_DOMAIN, LOGIN_ACTION_ID, management } from './lib/auth0-management.mjs';
+import { GATEWAY_MANAGEMENT_CLIENT_ID, assertGatewayManagementClient } from './lib/gateway-management-client.mjs';
 
 const apply = process.argv.includes('--apply');
 const code = await readFile(new URL('../auth0/actions/eastmoney-login.cjs', import.meta.url), 'utf8');
@@ -10,12 +11,10 @@ const expectedPreviousHash = '22910cd9bda1b473955170a33618ced78878bab887072a8afd
 if (createHash('sha256').update(action.deployed_version?.code ?? '').digest('hex') !== expectedPreviousHash && action.code !== code) throw new Error('The deployed Action changed since this fix was prepared; review it before publishing');
 if (action.name !== 'eastmoney login claims' || action.runtime !== 'node22') throw new Error('Unexpected login Action');
 if (!action.all_changes_deployed && action.code !== code) throw new Error('The Action has an unrelated unpublished draft; preserve it before publishing');
-const roleClientId = 'Ja1Jra2z1ifOKOUnA9M2qu3JzUudgW4j';
+const roleClientId = GATEWAY_MANAGEMENT_CLIENT_ID;
 const client = management('get', `clients/${roleClientId}`);
 const grants = management('get', `client-grants?client_id=${roleClientId}`);
-if (client.name !== 'eastmoney-login-roles' || !client.client_secret || grants.length !== 1
-  || grants[0].audience !== `https://${AUTH0_DOMAIN}/api/v2/`
-  || JSON.stringify(grants[0].scope) !== JSON.stringify(['read:roles', 'create:organization_member_roles'])) throw new Error('Unexpected login role client or grant');
+assertGatewayManagementClient(client, grants);
 const secrets = [
   { name: 'EASTMONEY_CLIENT_ID', value: '16vMxoYpr5AdPRiW1PkwIiHuRWszii6m' },
   { name: 'ROLES_DOMAIN', value: AUTH0_DOMAIN },

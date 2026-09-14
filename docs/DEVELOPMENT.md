@@ -49,7 +49,7 @@ Auth0 登录 Action 将业务信息签入一个短的 `user` claim：`user.roles
 
 按共享 AUTH 使用显式资源 `auth0:export` / `auth0:plan` / `auth0:apply`；默认禁止删除、不导出 Secret。`scripts/prepare-gateway-tenant.mjs` 从受限导出生成本次 web callback、API audience 与 Quant 机器应用配置；先审阅计划再 apply。保留现有角色、角色成员、注册 Form 和迁移账号例外。
 
-登录 Action 为 `auth0/actions/eastmoney-login.cjs`，给本站 API access token 添加 `user.email`、`user.roles` 与 `user.profile`；Auth0 原生 `sub` 即用户主键。Action 在登录时从事件取得角色名称，通过专用 `eastmoney-login-roles` 机器应用解析稳定角色 ID，并给未持有 `authenticated` 的本组织用户增量分配基础角色；该应用仅有 `read:roles` 与 `create:organization_member_roles`。声明配置见 `auth0/login-role-client.yaml`；`scripts/publish-login-claims.mjs` 先 plan、再 `--apply`，受控更新代码，保留现有 Secrets、依赖与绑定并回读 deployed version。旧 token 缺少角色声明时要求重新登录。确认 Gateway 切换完成后移除本站应用的旧 Access callback/logout 白名单。
+登录 Action 为 `auth0/actions/eastmoney-login.cjs`，给本站 API access token 添加 `user.email`、`user.roles` 与 `user.profile`；Auth0 原生 `sub` 即用户主键。Action 在登录时从事件取得角色名称，通过统一的 `eastmoney gateway management` 机器应用解析稳定角色 ID，并给未持有 `authenticated` 的本组织用户增量分配基础角色；同一应用还供 Gateway 身份服务和注册资料 Action 使用。六项 Management API 权限及固定 client ID 见 `auth0/gateway-management-client.yaml`；`scripts/publish-login-claims.mjs` 先 plan、再 `--apply`，受控更新代码，保留现有 Secrets、依赖与绑定并回读 deployed version。旧 token 缺少角色声明时要求重新登录。确认 Gateway 切换完成后移除本站应用的旧 Access callback/logout 白名单。
 
 ## 生产切换
 
@@ -86,7 +86,7 @@ Auth0 Management API 的账号、角色读取及管理 token 获取遇到 429 �
 
 ## Auth0 RBAC 与授权缓存
 
-- `scripts/prepare-rbac.mjs plan` 从受限 Deploy CLI 导出生成 Gateway API 权限目录、登录角色 client grant 和增量角色/成员计划。`auth0:plan/apply --include=resourceServers,clientGrants` 只更新显式资源，禁止删除。当前 Deploy CLI 的 roles export 仅包含 tenant roles，组织角色及成员通过脚本 `apply` 增量补齐，再 `verify` 回读；已有其他 audience 权限保留。
+- `scripts/prepare-rbac.mjs plan` 从受限 Deploy CLI 导出生成 Gateway API 权限目录、统一 Gateway management client grant 和增量角色/成员计划。`auth0:plan/apply --include=resourceServers,clientGrants` 只更新显式资源，禁止删除。当前 Deploy CLI 的 roles export 仅包含 tenant roles，组织角色及成员通过脚本 `apply` 增量补齐，再 `verify` 回读；已有其他 audience 权限保留。
 - 本站 58 项业务权限注册到 Gateway audience；API 启用 RBAC，但 `token_dialect=access_token`，不启用 Add Permissions in the Access Token。用户 JWT 只声明身份与角色，机器 Choice scope 保持不变。
 - 内测给所有本站组织成员配置 `authenticated`，给本站全部角色授予全部已登记权限。新用户通过登录 Action 自动获得基础角色。结束内测时在 Auth0 调整角色权限，无需改变鉴权代码。
 - Gateway 将本站角色目录与授权序列化为一个 JSON Response，保存在命名 Cloudflare Cache API 中。TTL 为 3600 秒；请求命中时不查询 Auth0，缺失/过期时完整读取并替换；读取失败返回 503，不使用过期或半份授权。

@@ -1,0 +1,18 @@
+clients:
+  - client_id: LA46CcB3FQ4Uac4JyEzPSObcV4PV8CFU
+    name: eastmoney gateway management
+    description: 'Gateway identity service, login role resolution and baseline assignment, and hosted signup profile persistence.'
+    app_type: non_interactive
+    grant_types:
+      - client_credentials
+    is_first_party: true
+clientGrants:
+  - client_id: LA46CcB3FQ4Uac4JyEzPSObcV4PV8CFU
+    audience: https://hasbai.eu.auth0.com/api/v2/
+    scope:
+      - read:users
+      - update:users
+      - read:roles
+      - read:organization_members
+      - read:organization_member_roles
+      - create:organization_member_roles

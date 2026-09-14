@@ -1,5 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+throw new Error('Historical organization migration is retired: its pre-consolidation snapshot would recreate old M2M applications. Use Gateway auth0/README.md and a fresh explicit resource plan.');
 const yaml = createRequire(import.meta.resolve('auth0-deploy-cli'))('js-yaml');
 const before = yaml.load(await readFile('.auth0-deploy/organization-before/tenant.yaml', 'utf8'));
 const orgId = 'org_6yvoRRCkzk3eGkBS';

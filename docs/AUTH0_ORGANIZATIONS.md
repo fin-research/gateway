@@ -2,16 +2,16 @@
 
 Eastmoney 在现有 `hasbai.eu.auth0.com` 租户内使用组织 `org_6yvoRRCkzk3eGkBS`（东方财富证券）。这是业务身份隔离；管理 API、签名密钥、登录域名、邮件提供方、套餐和租户管理员仍共用，不能视为独立 Auth0 租户。
 
-## 应用盘点（2026-09-12）
+## 应用盘点（2026-09-14 更新）
 
 | Application | 处置与用途 |
 |---|---|
 | eastmoney | 保留；网站授权码 + PKCE；必须在 Eastmoney 组织登录 |
 | eastmoney MCP portal | 保留；Cloudflare 门户 IdP 和 Data 逐用户 OAuth；必须在 Eastmoney 组织登录 |
 | eastmoney quant gateway | 保留；只有 Gateway API 的 `data.choice:read`，没有 Management API 权限 |
-| eastmoney identity management | 保留；Gateway 资料与组织目录；`read:users`、`update:users`、`read:roles`、`read:organization_members`、`read:organization_member_roles` |
-| eastmoney signup profile | 保留；Hosted Form 保存新账号资料；仅 `update:users` |
-| eastmoney-login-roles | 保留；登录 Action 查询角色 ID；`read:roles`、`create:organization_member_roles` |
+| eastmoney gateway management | 复用原 identity management 应用；Gateway 身份服务、登录角色解析与基础角色分配、注册资料保存统一使用；六项权限见 [声明配置](../auth0/gateway-management-client.yaml) |
+| eastmoney signup profile（旧 M2M） | 已合并并删除旧 M2M；同名 Hosted Form 与 Action 继续保留 |
+| eastmoney-login-roles（旧 M2M） | 已合并并删除旧 M2M；登录 Action 改用 Gateway management 凭据 |
 | eastmoney dashboard profile | 退役；`grant_types=[]`、Management API `scope=[]`，标记 `lifecycle=retired`。保留应用 ID 供可逆回退，没有永久删除 |
 | cli | 共用 Deploy CLI 管理工具；当前审计也依赖它。保留，不合并到业务运行时凭据 |
 | All Applications | Auth0 系统管理上下文；无普通 app_type，留存日志为后台管理事件，未修改 |
@@ -19,7 +19,7 @@ Eastmoney 在现有 `hasbai.eu.auth0.com` 租户内使用组织 `org_6yvoRRCkzk3
 
 旧 profile 应用在当前六仓库中无引用，Dashboard 生产 bindings 已无 Auth0 凭据，Gateway 使用另一管理 client ID，且留存日志无调用。三项证据共同支持停用。日志最早可见时间为 2026-09-11 07:47 UTC，不能仅凭这一短窗口认定应用无用；Quant/MCP 虽无该窗口内调用，仍有生产引用，予以保留。
 
-独立注册资料和角色查询应用只持有各自所需权限，不与 Gateway 管理凭据合并。共用 `cli` 仍是租户级管理权限，不受业务组织限制；没有为了减少应用数量把该权限放入运行时。
+2026-09-14 按应用管理要求将注册资料和角色查询凭据并入 Gateway management。权限为原三应用的并集，不增加新的租户管理能力；两个 Action 仍保留原业务校验和用户范围。共用 `cli` 仍是租户级管理权限，不受业务组织限制；没有为了减少应用数量把该权限放入运行时。
 
 ## 用户与权限
 
@@ -71,3 +71,14 @@ Quant 实际申请 token 成功，Choice 缺参请求返回 422，个人资料/C
 最终角色审计逐一读取 9 名成员：原租户级角色分配剩余 0 条，组织内保留原分配 6 条，与迁移前快照一致。完成后再次运行 `pnpm check`，62 项通过。
 
 2026-09-13 权限方案更新：组织成员统一增加 authenticated，全部本站角色在 Auth0 授予全部 Gateway 业务权限；不再使用 beta-open。新用户登录自动补基础角色；运行时角色授权来自 Gateway 的 1 小时 Cache API JSON 缓存。上文“不补权限”和 permission 表键为 9 月 12 日迁移历史，现行规则见 [开发与交付](DEVELOPMENT.md#auth0-rbac-与授权缓存)。
+
+
+## 2026-09-14 M2M 合并验收
+
+统一应用 `eastmoney gateway management` 保留 Gateway 原 client ID `LA46CcB3FQ4Uac4JyEzPSObcV4PV8CFU` 和 Secret。两个 Action 通过显式 Deploy CLI 计划与导入更新凭据，代码、Form、依赖、绑定顺序不变；登录 Action 版本 `bd487f28-ac1b-4598-8e0c-f0d9cc12d1ee`，注册资料 Action 版本 `cc799d48-69e0-4790-86e6-1b4f132e05c8`。
+
+- test@18.cn 真实 HTTP 登录和 72 项访问探针全部通过；缓存刷新 200，返回 58 权限；MCP 23 工具、health 和错误输入拒绝均通过。
+- 使用统一凭据和线上 Action 代码实际调用管理 API：组织目录读取、重复授予测试账号已有 authenticated、以原值保存姓名部门均通过，回读确认资料和角色不变。没有创建账号，没有执行完整 Hosted Form 注册提交或浏览器验收。
+- 两个旧应用先关闭 grant_types 并清空 scopes，实际申请 token 均返回 403 unauthorized_client；停用后新会话登录通过，再按精确 ID 删除并回读确认不存在。
+- Gateway 检查 73 项通过、部署预检通过；Dashboard 旧发布器加退役保护，类型检查、537 项测试和构建通过。仅修改租户配置与维护工具，Gateway Worker 凭据和运行时代码不需要重新部署。
+- 受限导出与操作证据保存在本次工作树 `.auth0-deploy/m2m-before`、`m2m`、`m2m-after`，不提交凭据或用户资料。
