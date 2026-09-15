@@ -11,6 +11,7 @@ export const PERMISSION_DEFINITIONS = [
   ['research.policy_commentary:update', '保存政策点评', '修改政策点评内容'],
   ['research.article:read', '新闻与研报', '读取新闻、研报和研究点评'],
   ['research.workspace:read', '交易研究工作台', '进入交易研究总览及研究辅助'],
+  ['research.workflow:update', '维护交易流程', '增删改交易流程节点及调整顺序'],
   ['research.economic_indicator:read', '经济指标', '读取经济观测和趋势'],
   ['bond.ledger:read', '二级池台账', '读取二级池台账与周报'],
   ['bond.ledger:import', '导入二级池台账', '上传 Excel 并发起台账导入'],

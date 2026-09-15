@@ -24,6 +24,7 @@ export const ROUTE_PERMISSIONS: Record<string, Methods> = {
   '/commentaries/[id]': { GET: 'research.article:read' }, '/api/commentaries/[id]': { GET: 'research.article:read' },
   '/trading-research': { GET: 'research.workspace:read' },
   '/trading-research/[view]': { GET: 'research.workspace:read' },
+  '/api/trading-workflow/config': { GET: 'research.workspace:read', PUT: 'research.workflow:update' },
   '/api/economic-indicators': { GET: 'research.economic_indicator:read' },
   '/credit-workbench/[[view]]': { GET: 'credit.institution:read' },
   '/credit-assistant': { GET: 'credit.assistant:read' },

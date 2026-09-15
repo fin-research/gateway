@@ -104,3 +104,7 @@ Auth0 Management API 的账号、角色读取及管理 token 获取遇到 429 �
 - test@18.cn 真实 HTTP 登录和 72 项匿名/用户访问探针全部通过；手动缓存刷新 HTTP 200，个人缓存返回 58 权限和 authenticated。Data MCP 23 工具、health 及错误输入检查通过。
 - Quant 真实机器 token 获取成功；Choice 缺参 422，profile/CAMEL/MCP 全部 403。个人页、角色页 HTTP 200，线上 HTML 包含 scope/resource/action 分层组件和缓存刷新入口，无旧权限编辑表单。
 - 按规范未使用浏览器、截图或人工视觉验收。缓存跨节点传播与一小时过期语义以 Cache API 契约及单元测试覆盖，未等待一小时做线上到期实验。
+
+## 交易流程配置权限
+
+`GET /api/trading-workflow/config` 使用 `research.workspace:read`，`PUT` 使用 `research.workflow:update`。Gateway 仅执行路由准入与同源校验，Dashboard 校验节点树和配置版本；每日完成、分支及提醒状态只在浏览器保存。新增权限通过 Deploy CLI 仅追加 Gateway API scope，并向现有本站角色增量授予该项，不变更成员或机器 grant。发布后运行 `auth:verify -- --refresh-permissions` 并读取配置接口确认新权限；其他 Cloudflare 节点仍按现有缓存 TTL 更新。
