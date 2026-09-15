@@ -18,7 +18,7 @@ export function dashboardRoute(request: Request): string | null {
 export function dashboardPolicy(request: Request) { return requestPolicy(request, dashboardRoute(request)); }
 
 export const PUBLIC_DATA_RESOURCES = new Set([
-  '/health', '/config', '/docs', '/redoc', '/openapi.json', '/omo', '/cfets', '/cfets-histories', '/bond-top-case',
+  '/chinamoney/shibor', '/health', '/config', '/docs', '/redoc', '/openapi.json', '/omo', '/cfets', '/cfets-histories', '/bond-top-case',
   '/futures-latest', '/margin', '/industry', '/stock-summary', '/primary-issues', '/broker-bond-registrations',
   '/today-trades', '/favorite-quotes', '/bond-infos', '/news', '/wechat-articles',
 ]);
