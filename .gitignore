@@ -9,3 +9,6 @@ dist/
 .ops/
 *.log
 .DS_Store
+
+# Local test evidence
+/coverage/

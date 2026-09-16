@@ -100,7 +100,8 @@ test('stale identity, blocked accounts and foreign connections cannot read or mu
 });
 
 test('upstream credential errors and redirects are service failures without credential leakage', async () => {
-  for (const status of [301, 302, 401, 403, 429, 500]) {
+  // 429 retry timing is covered with an injected clock in auth0-rate-limit.test.mjs.
+  for (const status of [302, 401, 403, 500]) {
     const { service } = fixture({ respond: () => new Response('secret diagnostics', { status }) });
     await assert.rejects(service.read(), { status: 503, message: '账号服务暂时不可用，请稍后重试' });
   }

@@ -15,7 +15,8 @@
     "auth:verify": "node --use-env-proxy scripts/verify-auth-access.mjs",
     "auth0:export": "node --use-env-proxy scripts/auth0-deploy.mjs export",
     "auth0:plan": "node --use-env-proxy scripts/auth0-deploy.mjs plan",
-    "auth0:apply": "node --use-env-proxy scripts/auth0-deploy.mjs apply"
+    "auth0:apply": "node --use-env-proxy scripts/auth0-deploy.mjs apply",
+    "test:coverage": "mkdir -p coverage && node --experimental-test-coverage --test-coverage-include='src/**/*.ts' --test-coverage-include='src/**/*.js' --test-coverage-exclude='src/**/generated/**' --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info --test tests/*.test.mjs"
   },
   "dependencies": {
     "graphql": "16.11.0",

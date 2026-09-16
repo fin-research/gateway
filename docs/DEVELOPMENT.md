@@ -108,3 +108,7 @@ Auth0 Management API 的账号、角色读取及管理 token 获取遇到 429 �
 ## 交易流程配置权限
 
 `GET /api/trading-workflow/config` 使用 `research.workspace:read`，`PUT` 使用 `research.workflow:update`。Gateway 仅执行路由准入与同源校验，Dashboard 校验节点树和配置版本；每日完成、分支及提醒状态只在浏览器保存。新增权限通过 Deploy CLI 仅追加 Gateway API scope，并向现有本站角色增量授予该项，不变更成员或机器 grant。发布后运行 `auth:verify -- --refresh-permissions` 并读取配置接口确认新权限；其他 Cloudflare 节点仍按现有缓存 TTL 更新。
+
+## 测试分层与覆盖率
+
+测试规范、覆盖率口径、当前审计及专项入口见 [TESTING](TESTING.md)。
