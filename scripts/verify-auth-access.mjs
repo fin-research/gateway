@@ -30,7 +30,14 @@ export const ACCESS_PROBES = [
   ['financing.data:read', '/financing/bond-investors', [200]],
   ['financing.report:read', '/financing/liability-report', [200]],
   ['account.profile:read', '/api/profile', [200]],
-  ['auth.permission:read', '/management/people', [200]],
+  ['admin', '/management/people', [200]],
+  ['admin', '/management/messenger', [200]],
+  ['login', '/management/me', [200]],
+  ['login', '/management/permissions', [200]],
+  ['login', '/management/notifications', [200]],
+  ['login', '/api/notifications/settings', [200]],
+  ['public', '/service-worker.js', [200]],
+  ['public', '/manifest.webmanifest', [200]],
   ['public', '/data/health', [200]],
   ['public', '/data/graphql', [200]],
   ['login', '/data/choice/css', [422]],
@@ -84,7 +91,7 @@ async function main() {
       headers: { Origin: SITE_ORIGIN, Cookie: session.cookies.header(SITE_ORIGIN + '/auth/permissions/refresh') },
     });
     const result = JSON.parse(await boundedText(response));
-    if (response.status !== 200 || result.success !== true || !Number.isFinite(result.updatedAt)) failures.push('permission cache refresh');
+    if (response.status !== 403) failures.push('ordinary user must not refresh shared permission cache');
     const own = await session.request(SITE_ORIGIN + '/auth/permissions', { followRedirects: false });
     const snapshot = JSON.parse(own.text);
     const hasBaseline = snapshot.roles?.some(role => role.name === 'authenticated');
