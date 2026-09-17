@@ -112,3 +112,11 @@ Auth0 Management API 的账号、角色读取及管理 token 获取遇到 429 �
 ## 测试分层与覆盖率
 
 测试规范、覆盖率口径、当前审计及专项入口见 [TESTING](TESTING.md)。
+
+## 全站管理员与通知
+
+Auth0 本组织角色 `admin` 为全站管理员；`scripts/provision-site-admin.mjs plan/apply/verify` 精确定位 shiyue@18.cn 的现有组织成员，创建组织角色、赋予全部本站 scope 并核对该角色唯一成员。脚本保留其他角色/成员，不改变登录 Action、机器应用或 API audience。新角色在重新登录后进入签名 JWT；Gateway 同时要求角色 ID 出现在当前角色目录，普通角色的广泛 scope 不构成管理员身份。
+
+管理个人页面 `/management/me`、`/management/permissions`、`/management/notifications` 和本人通知设置/设备 API 仅要求登录；原后台管理、权限缓存刷新和资金日报上传要求 admin。未知路由仍失败关闭。manifest、Service Worker、离线页与两张 PWA 图标使用精确公开白名单。
+
+私有 IdentityService `/directory/notification-users` 提供当前有效本站用户的通知类别资格，由 Dashboard NotificationSource 转给 Messenger，不包含联系方式。Workflow 类仅管理员可用。角色成员变化仍按现有签名会话更新语义；消息投递资格查询使用当前目录，不信任客户端订阅传入的角色。

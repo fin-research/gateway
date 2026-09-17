@@ -3,7 +3,7 @@ import { createDirectory } from './lib/server/auth0-directory.ts';
 import { createProfileService, ProfileError, readProfileJson } from './lib/server/profile.ts';
 import { AccessError, accessFailure } from './lib/server/access.ts';
 import { permissionCache } from './lib/server/permission-cache.ts';
-import { hasPermission } from './lib/permissions.ts';
+import { hasPermission, PERMISSION_CODES } from './lib/permissions.ts';
 import { CONTEXT_HEADER, type GatewayContext } from './forward.ts';
 import { clearSession } from './session.ts';
 
@@ -29,6 +29,17 @@ export async function identityService(request: Request, env: Env): Promise<Respo
   try {
     const path = new URL(request.url).pathname;
     const directory = createDirectory(env);
+    if (request.method === 'GET' && path === '/directory/notification-users') {
+      const snapshot = await permissionCache(env).snapshot();
+      const people = await directory.people();
+      return Response.json(people.filter(person => person.active).map(person => {
+        const admin = person.roles.some(role => role.name === 'admin' && snapshot.roles.some(current => current.id === role.id && current.name === 'admin'));
+        const permissions = admin ? [...PERMISSION_CODES] : person.roles.flatMap(role => snapshot.configurations[role.id]?.permissions ?? []);
+        return { id: person.id, categories: [ ...(admin ? ['workflow'] : []),
+          ...(permissions.includes('research.workspace:read') ? ['trading'] : []),
+          ...(permissions.includes('financing.project:read') ? ['financing'] : []) ] };
+      }), { headers: privateHeaders });
+    }
     if (request.method === 'GET' && path === '/directory/people') return Response.json(await directory.people(), { headers: privateHeaders });
     if (request.method === 'GET' && path === '/directory/roles') return Response.json(await directory.roles(), { headers: privateHeaders });
     const context: GatewayContext = JSON.parse(Buffer.from(request.headers.get(CONTEXT_HEADER) ?? '', 'base64url').toString('utf8'));
@@ -39,7 +50,7 @@ export async function identityService(request: Request, env: Env): Promise<Respo
       return profileRequest(request, env, user);
     }
     if (path !== '/roles/configurations' || request.method !== 'GET') throw new AccessError(403, '角色权限请在 Auth0 管理');
-    if (!hasPermission(user.authorization?.permissions, 'auth.permission:read')) throw new AccessError(403, '当前角色无权查看权限');
+    if (!user.authorization?.roles.some(role => role.name === 'admin')) throw new AccessError(403, '当前角色无权查看权限');
     const snapshot = await permissionCache(env).snapshot();
     return Response.json({ roles: snapshot.roles, configurations: snapshot.configurations, updatedAt: snapshot.updatedAt, mode: user.authorization!.mode }, { headers: privateHeaders });
   } catch (error) {

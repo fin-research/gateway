@@ -1,7 +1,7 @@
 import type { PermissionCode } from '../permissions.ts';
 import { AccessError } from './access.ts';
 
-type Policy = { permission?: PermissionCode; public?: boolean; login?: boolean };
+type Policy = { permission?: PermissionCode; public?: boolean; login?: boolean; admin?: boolean };
 export { ROUTE_PERMISSIONS } from '../route-permissions.ts';
 import { ROUTE_PERMISSIONS, pagePermission } from '../route-permissions.ts';
 
@@ -18,8 +18,8 @@ export function requestPolicy(request: Request, routeId: string | null): Policy 
   catch { throw new AccessError(403, '请求路径无效'); }
   const method = request.method === 'HEAD' ? 'GET' : request.method;
   // Static files are not a substitute for an unregistered application endpoint.
-  if (!routeId && method === 'GET' && (/^\/_app\//.test(path) || /^\/(favicon\.(ico|svg)|robots\.txt)$/.test(path) || /^\/institution-logos\/[a-z0-9-]+\.(ico|png|jpg)$/.test(path))) return { public: true };
-  let value: PermissionCode | 'public' | 'login' | undefined;
+  if (!routeId && method === 'GET' && (/^\/_app\//.test(path) || /^\/(favicon\.(ico|svg)|robots\.txt|service-worker\.js|manifest\.webmanifest|offline\.html|pwa-(192|512)\.png)$/.test(path) || /^\/institution-logos\/[a-z0-9-]+\.(ico|png|jpg)$/.test(path))) return { public: true };
+  let value: PermissionCode | 'public' | 'login' | 'admin' | undefined;
   if (routeId === '/data/[...path]') {
     if (!['GET', 'POST'].includes(method)) throw new AccessError(403, '数据操作未登记');
     value = /^\/data\/choice(?:\/|$)/.test(path) ? 'login'
@@ -34,6 +34,7 @@ export function requestPolicy(request: Request, routeId: string | null): Policy 
   }
   if (!value) throw new AccessError(403, '该入口或操作未登记路由权限；这不表示当前账号缺少权限', 'ROUTE_NOT_REGISTERED');
   if (value === 'public') return { public: true };
+  if (value === 'admin') return { admin: true };
   if (value === 'login') return { login: true };
   return { permission: value };
 }

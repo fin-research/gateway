@@ -17,7 +17,7 @@ export async function fixture(t) {
   const key=new URL(`/__gateway-permissions/v1/${env.AUTH0_ORGANIZATION_ID}`,env.SITE_ORIGIN);
   key.searchParams.set('audience',env.AUTH0_AUDIENCE);
   const cache = new PermissionCacheStore(jsonCache,key.href,
-    async () => ({version:1,updatedAt:Date.now(),roles:[{id:'rol_Authenticated',name:'authenticated',description:''}],configurations:{rol_Authenticated:{permissions:grants}}}));
+    async () => ({version:1,updatedAt:Date.now(),roles:[{id:'rol_Authenticated',name:'authenticated',description:''},{id:'rol_TestAdmin',name:'admin',description:''}],configurations:{rol_Authenticated:{permissions:grants}}}));
   await cache.refresh();
   const calls = { dashboard: [], data: [], auth0: [] };
   env.DASHBOARD = { async fetch(request) { calls.dashboard.push(request); return Response.json({ reached: 'dashboard' }); } };
@@ -31,8 +31,9 @@ export async function fixture(t) {
     if (url.pathname.endsWith('/jwks.json')) return Response.json({ keys: [jwk] });
     calls.auth0.push(url.pathname);
     if (url.pathname === '/oauth/token') return Response.json({ access_token: 'unit-management', expires_in: 300 });
-    if (url.pathname === '/api/v2/roles') return Response.json([{id:'rol_Authenticated',name:'authenticated',owner_id:env.AUTH0_ORGANIZATION_ID}]);
+    if (url.pathname === '/api/v2/roles') return Response.json([{id:'rol_Authenticated',name:'authenticated',owner_id:env.AUTH0_ORGANIZATION_ID},{id:'rol_TestAdmin',name:'admin',owner_id:env.AUTH0_ORGANIZATION_ID}]);
     if (url.pathname.endsWith('/roles')) return Response.json([]);
+    if (url.pathname === '/api/v2/roles/rol_TestAdmin/permissions')return Response.json([]);
     if (url.pathname === '/api/v2/roles/rol_Authenticated/permissions') return Response.json(grants.map(permission_name=>({permission_name,resource_server_identifier:env.AUTH0_AUDIENCE})));
     if (url.pathname === '/api/v2/users/auth0%7Ctest') return Response.json(profile);
     throw new Error('Unexpected outbound request');

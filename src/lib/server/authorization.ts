@@ -1,6 +1,6 @@
 import { AccessError } from './access.ts';
 import { z } from 'zod';
-import { hasPermission, type AuthorizationMode } from '../permissions.ts';
+import { hasPermission, PERMISSION_CODES, type AuthorizationMode } from '../permissions.ts';
 import { permissionCache } from './permission-cache.ts';
 import { requestPolicy } from './permission-policy.ts';
 import type { SiteIdentity } from '../identity.ts';
@@ -70,7 +70,11 @@ export async function authorizeRequest(request: Request, env: Env, routeId: stri
   requireSameOrigin(request);
   const mode = authorizationMode(env.AUTHORIZATION_MODE);
   const profile = user.authorization!;
-  const { permissions } = await permissionCache(env).permissions(profile.roles.map(role => role.id));
+  const cache = permissionCache(env);
+  const snapshot = await cache.snapshot();
+  const isAdmin = profile.roles.some(role => role.name === 'admin' && snapshot.roles.some(current => current.id === role.id && current.name === 'admin'));
+  const permissions = isAdmin ? [...PERMISSION_CODES] : (await cache.permissions(profile.roles.map(role => role.id))).permissions;
+  if (policy.admin && !isAdmin) throw new AccessError(403, '仅管理员可执行该操作');
   user.authorization = { ...profile, permissions, mode };
   if (policy.permission && !hasPermission(permissions, policy.permission)) throw new AccessError(403, '当前角色无权执行该操作');
   return { user, permissions, directory: undefined };
