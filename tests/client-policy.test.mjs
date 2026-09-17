@@ -11,7 +11,7 @@ test('generated client preflights agree with server methods, dynamic paths, alia
       const url = new URL(path + (action ? '?/' + action : ''), 'https://eastmoney.hasbai.xyz');
       const id = matchDashboardRoute(path);
       const server = requestPolicy(new Request(url, { method }), id);
-      assert.equal(clientRequestPermission(url, method), server.public ? 'public' : server.login ? 'login' : server.permission, `${route} ${key}`);
+      assert.equal(clientRequestPermission(url, method), server.public ? 'public' : server.login ? 'login' : server.admin ? 'admin' : server.permission, `${route} ${key}`);
     }
   }
   for (const path of ['/api/credit?bad=1', '/trading-research/credit-assistant', '/financing/data/api/rpc/liability_weekly_report_data']) {

@@ -35,7 +35,7 @@ test('real URL matching covers every registered route and method/action without 
       if (path.startsWith('/auth/') || ['/financing/login', '/financing/logout', '/api/profile'].includes(path)) continue;
       const anonymous = await gatewayRequest(f.request(url, { method }), f.env);
       assert.equal(anonymous.status, scope === 'public' ? 200 : 401, `anonymous ${method} ${url}`);
-      assert.equal((await gatewayRequest(f.request(url, { token, method }), f.env)).status, 200, `${method} ${url}`);
+      assert.equal((await gatewayRequest(f.request(url, { token, method }), f.env)).status, scope === 'admin' ? 403 : 200, `${method} ${url}`);
     }
   }
   for (const [path, method] of [['/unknown', 'GET'], ['/financing/projects?/createProject&/deleteProject', 'POST'], ['/api/credit', 'DELETE'], ['/data%2fchoice/css', 'GET'], ['/api/%2563redit', 'GET'], ['/api/credit/extra', 'GET']]) {
