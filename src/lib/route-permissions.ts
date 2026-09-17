@@ -18,6 +18,7 @@ export const ROUTE_PERMISSIONS: Record<string, Methods> = {
   '/api/tracking-commentaries': { GET: 'research.policy:read', POST: 'research.policy_commentary:update' },
   '/api/tracking-commentaries/[id]': { GET: 'research.policy:read', PUT: 'research.policy_commentary:update' },
   '/api/tracking-commentaries/[id]/generate': { POST: 'research.policy:generate' },
+  '/api/tracking-commentaries/[id]/pdf': { GET: 'research.policy:read', POST: 'research.policy_commentary:update' },
   '/api/tracking-commentaries/[id]/revisions': { GET: 'research.policy:read' },
   '/api/policies': { GET: 'research.policy:read' },
   '/api/policies/articles': { GET: 'research.policy:read' },
