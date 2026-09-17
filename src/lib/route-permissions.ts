@@ -15,6 +15,10 @@ export const ROUTE_PERMISSIONS: Record<string, Methods> = {
   '/market-hotspots': { GET: 'research.hotspot:read' },
   '/api/rag/hotspots': { GET: 'research.hotspot:read', POST: 'research.hotspot:generate' },
   '/policy-tracking': { GET: 'research.policy:read' },
+  '/api/tracking-commentaries': { GET: 'research.policy:read', POST: 'research.policy_commentary:update' },
+  '/api/tracking-commentaries/[id]': { GET: 'research.policy:read', PUT: 'research.policy_commentary:update' },
+  '/api/tracking-commentaries/[id]/generate': { POST: 'research.policy:generate' },
+  '/api/tracking-commentaries/[id]/revisions': { GET: 'research.policy:read' },
   '/api/policies': { GET: 'research.policy:read' },
   '/api/policies/articles': { GET: 'research.policy:read' },
   '/api/policies/[id]/articles': { PUT: 'research.policy:update' },
@@ -77,7 +81,7 @@ export function pagePermission(pathname: string, routeId: string | null): Method
   catch { return undefined; }
   if (routeId === '/credit-workbench/[[view]]' && path.endsWith('/assistant')) return 'credit.assistant:read';
   if (routeId === '/trading-research/[view]') {
-    const views: Record<string, PermissionCode> = { 'market-hotspots': 'research.hotspot:read', 'policy-tracking': 'research.policy:read', 'secondary-bond-pool': 'bond.ledger:read', 'bond': 'bond.ledger:read', 'financing-model': 'model.financing:read', 'credit': 'credit.institution:read', 'credit-assistant': 'credit.assistant:read' };
+    const views: Record<string, PermissionCode> = { 'market-hotspots': 'research.hotspot:read', 'policy-tracking': 'research.policy:read', 'tracking-commentary': 'research.policy:read', 'secondary-bond-pool': 'bond.ledger:read', 'bond': 'bond.ledger:read', 'financing-model': 'model.financing:read', 'credit': 'credit.institution:read', 'credit-assistant': 'credit.assistant:read' };
     return views[path.split('/').pop() ?? ''] ?? ROUTE_PERMISSIONS[routeId]?.GET;
   }
   return ROUTE_PERMISSIONS[routeId ?? '']?.GET;
