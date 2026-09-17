@@ -53,6 +53,8 @@ export const PERMISSION_DEFINITIONS = [
   ['financing.report:generate', '生成负债周报', '生成或覆盖负债周报快照'],
   ['account.profile:read', '个人信息', '读取本人 Auth0 资料和应用权限'],
   ['account.profile:update', '修改个人信息', '修改本人资料或请求密码重置'],
+  ['messenger.delivery:read', '消息投递', '查看消息与投递记录'],
+  ['messenger.delivery:retry', '重试消息', '手动重试失败或结果待确认的消息'],
   ['auth.permission:read', '角色权限查询', '读取 Auth0 角色及应用权限配置'],
   ['auth.permission:update', '刷新授权缓存', '从 Auth0 更新 Gateway 的角色权限缓存'],
   ['data.resource:read', '数据服务', '读取 Data REST 数据资源'],
@@ -66,7 +68,7 @@ export const PERMISSION_CODES: PermissionCode[] = PERMISSION_DEFINITIONS.map(([c
 const codes = new Set<string>(PERMISSION_CODES);
 export const PERMISSION_DOMAINS: Record<string, string> = {
   research: '市场研究', bond: '二级债券池', credit: '授信工作台', fund: '资金日报',
-  model: '量化模型', financing: '融资工作台', account: '个人账号', auth: '权限管理', data: '数据服务',
+  model: '量化模型', financing: '融资工作台', account: '个人账号', auth: '权限管理', data: '数据服务', messenger: '消息中台',
 };
 export function isPermissionCode(code: unknown): code is PermissionCode {
   return typeof code === 'string' && codes.has(code);

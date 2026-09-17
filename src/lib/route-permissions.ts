@@ -45,6 +45,7 @@ export const ROUTE_PERMISSIONS: Record<string, Methods> = {
   '/api/financing-model/sell-side': { POST: 'model.sell_side:generate', PATCH: 'model.sell_side:update' },
   '/profile': { GET: 'account.profile:read' },
   '/api/profile': { GET: 'account.profile:read', POST: 'account.profile:update' },
+  '/management/messenger': { GET: 'messenger.delivery:read', 'POST:retry': 'messenger.delivery:retry' },
   '/management': { GET: 'auth.permission:read' },
   '/auth/permissions': { GET: 'login' },
   '/auth/permissions/refresh': { POST: 'auth.permission:update' },
