@@ -70,6 +70,7 @@ test('client navigation and legacy workbench aliases require the same resource p
  for(const [path,route,permission] of [
    ['/credit-workbench/assistant/__data.json','/credit-workbench/[[view]]','credit.assistant:read'],
    ['/trading-research/secondary-bond-pool/__data.json','/trading-research/[view]','bond.ledger:read'],
+   ['/trading-research/tracking-commentary','/trading-research/[view]','research.policy:read'],
    ['/trading-research/bond','/trading-research/[view]','bond.ledger:read'],
    ['/trading-research/credit-assistant','/trading-research/[view]','credit.assistant:read'],
  ]) assert.equal(requestPolicy(request(path),route).permission,permission);
