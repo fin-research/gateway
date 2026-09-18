@@ -6,7 +6,7 @@ import {fixture} from './helpers/fixture.mjs';
 test('personal notification routes require login, management operations require admin',()=>{
  for(const path of ['/management','/management/me','/management/permissions','/management/notifications'])assert.deepEqual(requestPolicy(new Request('https://eastmoney.hasbai.xyz'+path),path),{login:true});
  for(const path of ['/management/people','/management/messenger'])assert.deepEqual(requestPolicy(new Request('https://eastmoney.hasbai.xyz'+path),path),{admin:true});
- for(const path of ['/service-worker.js','/manifest.webmanifest','/pwa-192.png','/pwa-512.png','/offline.html'])assert.deepEqual(requestPolicy(new Request('https://eastmoney.hasbai.xyz'+path),null),{public:true});
+ for(const path of ['/service-worker.js','/manifest.webmanifest','/pwa-192.png','/pwa-512.png','/offline.html','/offline'])assert.deepEqual(requestPolicy(new Request('https://eastmoney.hasbai.xyz'+path),null),{public:true});
 });
 test('legacy broad scopes cannot access admin backend',async t=>{
  const f=await fixture(t);await f.updateGrants(['auth.permission:read','messenger.delivery:read']);
