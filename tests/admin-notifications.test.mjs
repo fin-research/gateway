@@ -23,3 +23,13 @@ test('signed admin role grants full site permissions and backend access',async t
  const forged=await f.signed({user:{...f.userClaims,roles:[{id:'rol_Unregistered',name:'admin'}]}});
  await assert.rejects(authorizeRequest(f.request('/management/people',{token:forged}),f.env,'/management/people'),{status:403});
 });
+
+test('test message actions require signed admin and reject broad business scopes',async t=>{
+ const f=await fixture(t);await f.updateGrants(['messenger.delivery:read','messenger.delivery:retry']);
+ const options={method:'POST'};
+ const request=token=>f.request('/management/messenger?/sendTest',{...options,token});
+ assert.deepEqual(requestPolicy(request(await f.signed()),'/management/messenger'),{admin:true});
+ await assert.rejects(authorizeRequest(request(await f.signed()),f.env,'/management/messenger'),{status:403});
+ const token=await f.signed({user:{...f.userClaims,roles:[{id:'rol_TestAdmin',name:'admin'}]}});
+ await authorizeRequest(request(token),f.env,'/management/messenger');
+});
