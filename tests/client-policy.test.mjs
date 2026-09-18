@@ -24,3 +24,8 @@ test('generated client preflights agree with server methods, dynamic paths, alia
     assert.equal(clientRequestPermission(new URL(path, 'https://eastmoney.hasbai.xyz'), 'POST'), undefined);
   }
 });
+
+test('retired financing Workflow status URL remains unregistered',()=>{
+  assert.equal(matchDashboardRoute('/financing/data/import/debt-v1-old'),null);
+  assert.equal(clientRequestPermission(new URL('https://eastmoney.hasbai.xyz/financing/data/import/debt-v1-old'),'GET'),undefined);
+});
