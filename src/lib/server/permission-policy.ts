@@ -18,7 +18,7 @@ export function requestPolicy(request: Request, routeId: string | null): Policy 
   catch { throw new AccessError(403, '请求路径无效'); }
   const method = request.method === 'HEAD' ? 'GET' : request.method;
   // Static files are not a substitute for an unregistered application endpoint.
-  if (!routeId && method === 'GET' && (/^\/_app\//.test(path) || /^\/(favicon\.(ico|svg)|robots\.txt|service-worker\.js|manifest\.webmanifest|offline\.html|pwa-(192|512)\.png)$/.test(path) || /^\/institution-logos\/[a-z0-9-]+\.(ico|png|jpg)$/.test(path))) return { public: true };
+  if (!routeId && method === 'GET' && (/^\/_app\//.test(path) || /^\/(favicon\.(ico|svg)|robots\.txt|service-worker\.js|manifest\.webmanifest|offline(?:\.html)?|pwa-(192|512)\.png)$/.test(path) || /^\/institution-logos\/[a-z0-9-]+\.(ico|png|jpg)$/.test(path))) return { public: true };
   let value: PermissionCode | 'public' | 'login' | 'admin' | undefined;
   if (routeId === '/data/[...path]') {
     if (!['GET', 'POST'].includes(method)) throw new AccessError(403, '数据操作未登记');
