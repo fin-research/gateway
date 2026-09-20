@@ -115,7 +115,7 @@ async function main() {
     await rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'eastmoney-verification', version: '1' } });
     const list = await rpc('tools/list', {});
     const names = list.tools.map(tool => tool.name);
-    const expected = 23;
+    const expected = 24;
     if (names.length !== expected) failures.push(`${path} tool count`);
     const call = await rpc('tools/call', { name: 'health', arguments: {} });
     if (call.isError || call.structuredContent?.data?.status !== 'ok') failures.push(`${path} health`);

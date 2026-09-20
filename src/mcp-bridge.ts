@@ -24,6 +24,7 @@ export async function mcpBridge(request: Request, env: Env, context: GatewayCont
     if (!(clean.startsWith('/api/') || clean === '/financing' || clean.startsWith('/financing/') || clean === '/fund-report' || /^\/fund-report\/\d{4}-\d{2}-\d{2}\.html$/.test(clean))
       || clean === '/api/mcp' || clean === '/api/profile' || clean.startsWith('/api/notifications/') || clean.startsWith('/financing/login') || clean.startsWith('/financing/logout')) throw new AccessError(403, 'MCP 目标未开放');
     const policy = dashboardPolicy(probe);
+    if (policy.admin) throw new AccessError(403, 'MCP 不开放管理员操作');
     if (policy.permission && !hasPermission(permissions, policy.permission)) throw new AccessError(403, '当前角色无权执行该操作');
     return probe;
   }

@@ -2,6 +2,7 @@
 // child environment. Auth0's MCP client secret remains in memory throughout.
 import { management } from './lib/auth0-management.mjs';
 import { addChatGptRedirectUris } from './lib/mcp-client-redirects.mjs';
+import { portalServerSettings } from './lib/mcp-portal-servers.mjs';
 import { isDeepStrictEqual } from 'node:util';
 const account = '5cecc63c78acf8f5473f8745f4244448';
 const zone = 'e0665efd9fd68d06cbb9ab68a13cc7c6';
@@ -79,16 +80,16 @@ if (mode === 'upstreams') {
     policies: [{ name: 'Eastmoney 18.cn users', decision: 'allow', include: [{ email_domain: { domain: '18.cn' } }], require: [{ login_method: { id: provider.id } }], exclude: [] }],
   });
   const portal = await api(prefix + '/ai-controls/mcp/portals/eastmoney');
-  const others = (portal.servers ?? []).filter(item => item.server_id !== 'dashboard');
+  const others = (portal.servers ?? []).filter(item => item.server_id !== 'dashboard').map(portalServerSettings);
   const existing = portal.servers?.find(item => item.server_id === 'dashboard');
-  const servers = [...others, { ...existing, server_id: 'dashboard', on_behalf: true, default_disabled: false }];
+  const servers = [...others, { ...(existing ? portalServerSettings(existing) : {}), server_id: 'dashboard', on_behalf: true, default_disabled: false }];
   await api(prefix + '/ai-controls/mcp/portals/eastmoney', 'PUT', {
     name: portal.name, hostname: portal.hostname, description: portal.description, code_mode: portal.code_mode,
     secure_web_gateway: portal.secure_web_gateway, servers,
   });
   const verified = await api(prefix + '/ai-controls/mcp/portals/eastmoney');
   if (!verified.servers?.some(item => item.server_id === 'dashboard' && item.on_behalf === true)
-    || !isDeepStrictEqual(verified.servers.filter(item => item.server_id !== 'dashboard'), others)) throw new Error('Portal server preservation/readback failed');
+    || !isDeepStrictEqual(verified.servers.filter(item => item.server_id !== 'dashboard').map(portalServerSettings), others)) throw new Error('Portal server preservation/readback failed');
   console.log(JSON.stringify({ server: server.id, application: app.id, endpoint: apiOrigin + '/api/mcp', onBehalf: true, preservedServers: others.map(item => item.server_id) }));
 } else if (mode === 'organization' || mode === 'organization-plan') {
   const provider = (await api(prefix + '/identity_providers')).find(value => value.name === 'Eastmoney MCP Auth0');
@@ -135,7 +136,7 @@ if (mode === 'upstreams') {
   await configureClientRedirects(portalApp.id);
   const portal = await api(prefix + '/ai-controls/mcp/portals/eastmoney');
   await api(prefix + '/ai-controls/mcp/portals/eastmoney', 'PUT', { name: portal.name, hostname: portal.hostname, description: portal.description, code_mode: 'off', secure_web_gateway: false,
-    servers: [...(portal.servers ?? []).filter(item => !['data', 'research'].includes(item.server_id)), { server_id: 'data', on_behalf: true, default_disabled: false }, { server_id: 'research', on_behalf: false, default_disabled: false }] });
+    servers: [...(portal.servers ?? []).filter(item => !['data', 'research'].includes(item.server_id)).map(portalServerSettings), { server_id: 'data', on_behalf: true, default_disabled: false }, { server_id: 'research', on_behalf: false, default_disabled: false }] });
   const records = await api(`zones/${zone}/dns_records?name=mcp.hasbai.xyz`);
   if (records.length && !records.every(record => record.type === 'CNAME' && record.content === 'gateway.agents.cloudflare.com' && record.proxied)) throw new Error('Conflicting portal DNS; inspect before changing');
   if (!records.length) await api(`zones/${zone}/dns_records`, 'POST', { type: 'CNAME', name: 'mcp.hasbai.xyz', content: 'gateway.agents.cloudflare.com', proxied: true, ttl: 1 });

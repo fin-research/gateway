@@ -42,7 +42,7 @@ test('private MCP policies and dispatch enforce fresh real-route permission and 
 });
 test('private dispatch refuses recursion, external destinations, credentials APIs and expired contexts',async t=>{
   const f=await fixture(t);const ctx=await context(f);
-  for(const target of ['https://evil.test/api/credit','//evil.test/api/credit','/api/mcp','/api/mcp/__data.json','/api/profile','/auth/permissions','/api/notifications/settings','/api%2fcredit','/financing/logout','/api/unknown']) {
+  for(const target of ['https://evil.test/api/credit','//evil.test/api/credit','/api/mcp','/api/mcp/__data.json','/api/profile','/auth/permissions','/api/notifications/settings','/api/admin/notifications','/api%2fcredit','/financing/logout','/api/unknown']) {
     const response=await identityService(bridge('/mcp/dispatch?target='+encodeURIComponent(target),ctx,'GET'),f.env);assert.equal(response.status,403,target);
   }
   const expired=JSON.parse(Buffer.from(ctx,'base64url'));expired.user.expiresAt=1;
