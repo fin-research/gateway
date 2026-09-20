@@ -8,7 +8,7 @@ Gateway 是独立 Hono Worker。用户、角色与成员关系属于 Auth0；JWT
 - `src/tokens.ts` / `session.ts`：固定 Auth0 JWKS、RS256/issuer/audience/azp/时效、PKCE/state/nonce、标准 JWT 会话 Cookie、加密登录事务、退出。
 - `src/lib/server/authorization.ts`：JWT 角色快照与正常权限检查；授权 JSON 缓存见 `permission-cache.ts`。
 - `src/lib/permissions.ts` / `route-permissions.ts` / `server/permission-policy.ts`：唯一权限目录及路由策略。前两份通过 `scripts/sync-dashboard-contracts.mjs` 同步到 Dashboard 供菜单与导航使用。
-- `src/identity-service.ts`：私有 `IdentityService`，账号目录与角色配置；角色授权只读；编辑统一在 Auth0。
+- `src/identity-service.ts`：私有 `IdentityService`，账号目录、MCP 业务调用路由授权桥接与角色配置；角色授权只读；编辑统一在 Auth0。
 - `src/data.ts`：Data 公开资源、GraphQL 执行操作/别名/片段的 Choice 字段判定和机器作用域。
 - `src/forward.ts`：删除外部凭据/身份头，生成版本化 UTF-8 Base64URL 上下文。传输头不是认证凭据，信任来自命名 Service Binding 的可达性。
 

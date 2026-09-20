@@ -10,11 +10,12 @@ Data 单资源 MCP 保留在 `https://eastmoney.hasbai.xyz/data/mcp`，作为门
 |---|---|---|
 | 托管门户 | `mcp.hasbai.xyz/mcp`；portal `eastmoney` | Cloudflare Access managed OAuth，允许已登录的 18.cn 账号 |
 | Data 上游 | `eastmoney.hasbai.xyz/data/mcp`；server `data` | Auth0 逐用户 OAuth，`on_behalf=true`；Gateway 验证当前账号状态 |
+| Dashboard 上游 | `eastmoney.hasbai.xyz/api/mcp`；server `dashboard` | Auth0 逐用户 OAuth，`on_behalf=true`；业务查询、修改与 AI 生成按当前用户路由权限执行 |
 | 研究库上游 | `research.hasbai.xyz/mcp`；server `research` | AI Search research；不接入 credit 私密材料库 |
 
 独立 Auth0 客户端 `eastmoney MCP portal`（`M1a5PF3UJaFIZv1k4HO4IV06Z5fXQBHV`）用于门户 IdP
 和 Data 上游授权。Auth0 post-login Action 对其应用本站相同的邮箱验证和 18.cn 限制。
-Gateway 仅在 `/data/mcp` 接受此客户端的 API JWT，不扩大到 Dashboard、CAMEL 或通用 REST。
+Gateway 仅在 `/data/mcp` 和 Dashboard 业务 MCP `/api/mcp` 接受此客户端的 API JWT，不扩大到网站普通 REST、CAMEL 或管理接口。
 既有网页客户端和 Quant 机器权限保持原范围；旧站点 Access 应用不恢复。
 
 门户配置独立 IdP `Eastmoney MCP Auth0`。Data、research 各有 `mcp` 类型 Access 应用，
@@ -107,3 +108,11 @@ NO_PROXY=mcp.hasbai.xyz node --use-env-proxy scripts/verify-managed-mcp.mjs --re
 或把用户 JWT 写成共享管理员凭据来消除 Waiting。
 
 依据：[manual OAuth 首次授权与同步限制](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/#configure-manual-oauth-credentials)。
+
+## Dashboard 业务上游
+
+Dashboard 使用 SvelteKit + Cloudflare Agents MCP SDK v2，接口与工具目录由 [Dashboard MCP](../../dashboard/docs/MCP.md) 维护。Gateway `src/mcp-bridge.ts` 通过既有 IDENTITY 私有 binding 接收 `/mcp/policies` 和 `/mcp/dispatch`；每次按当前角色缓存和真实 route/action policy 校验，再经 `GatewayDashboard` 执行原业务 handler。没有新服务账户、JWT 转发或公开桥接入口。匿名/Quant 拒绝；专用 Portal JWT 的范围仅新增 `/api/mcp`。
+
+通过 Keychain 任务凭据运行 `node --use-env-proxy scripts/configure-mcp-portal.mjs dashboard` 可幂等添加上游、其 18.cn/专用 IdP Access 应用和 `on_behalf=true` 映射；保留现有 Data/研究库和工具策略。Gateway 授权桥接先发布，再发布 Dashboard，最后配置门户。
+
+程序化验收：`AUTH_TEST_ENV_FILE` 指向项目组未跟踪 `.env`，运行 `NO_PROXY=mcp.hasbai.xyz node --use-env-proxy scripts/verify-managed-mcp.mjs --dashboard --check-catalog`。检查 managed OAuth、三个上游、Dashboard 业务读取、无效写入拒绝、后台 Ready 和工具目录一致。这个只读/无效输入验收不等于真实写入或每个 AI 工具逐项执行。
