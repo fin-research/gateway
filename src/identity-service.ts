@@ -1,3 +1,4 @@
+import { mcpBridge } from './mcp-bridge.ts';
 import { Buffer } from 'node:buffer';
 import { createDirectory } from './lib/server/auth0-directory.ts';
 import { createProfileService, ProfileError, readProfileJson } from './lib/server/profile.ts';
@@ -45,6 +46,7 @@ export async function identityService(request: Request, env: Env): Promise<Respo
     const context: GatewayContext = JSON.parse(Buffer.from(request.headers.get(CONTEXT_HEADER) ?? '', 'base64url').toString('utf8'));
     if (!context || context.version !== 1 || !context.user?.auth0Id) throw new AccessError(401, '缺少已验证身份');
     const user = context.user;
+    if (path === '/mcp/dispatch' || path === '/mcp/policies') return await mcpBridge(request, env, context);
     if (path === '/api/profile') {
       if (!hasPermission(user.authorization?.permissions, request.method === 'POST' ? 'account.profile:update' : 'account.profile:read')) throw new AccessError(403, '当前角色无权执行该操作');
       return profileRequest(request, env, user);

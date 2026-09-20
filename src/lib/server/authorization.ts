@@ -19,7 +19,8 @@ export async function userIdentity(request: Request, env: Env, optional = false)
   if (!token && optional) return null;
   const payload = await verifyToken(token ?? '', env);
   requireSessionAge(request, payload);
-  return identityFromPayload(payload, env);
+  const mcp = new URL(request.url).pathname.replace(/\/$/, '') === '/api/mcp';
+  return identityFromPayload(payload, env, mcp && payload.azp === env.AUTH0_MCP_CLIENT_ID ? env.AUTH0_MCP_CLIENT_ID : env.AUTH0_CLIENT_ID);
 }
 
 function requireSessionAge(request: Request, payload: JWTPayload): void {
@@ -67,7 +68,7 @@ export async function authorizeRequest(request: Request, env: Env, routeId: stri
     throw error;
   }
   if (!user) return { user: null, permissions: [] as string[], directory: undefined };
-  requireSameOrigin(request);
+  if (!(routeId === '/api/mcp' && request.headers.has('Authorization') && !request.headers.has('Origin'))) requireSameOrigin(request);
   const mode = authorizationMode(env.AUTHORIZATION_MODE);
   const profile = user.authorization!;
   const cache = permissionCache(env);

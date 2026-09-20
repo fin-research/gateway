@@ -54,6 +54,42 @@ if (mode === 'upstreams') {
     }, registration_info: { client_id: clientId, redirect_uris: [origin + '/servers-callback'], token_endpoint_auth_method: 'client_secret_post', scope: 'openid profile email offline_access' } }),
   });
   console.log(JSON.stringify({ providerId: provider.id, dataServerId: data.id, authenticationStatus: data.authentication_status, status: data.status }));
+} else if (mode === 'dashboard') {
+  // Add one upstream without replacing existing servers, tools, prompts or policies.
+  const client = management('get', `clients/${clientId}?fields=client_id,client_secret,name&include_fields=true`);
+  if (client.name !== 'eastmoney MCP portal' || !client.client_secret) throw new Error('Expected dedicated MCP client');
+  const provider = (await api(prefix + '/identity_providers')).find(value => value.name === 'Eastmoney MCP Auth0');
+  if (!provider) throw new Error('Dedicated portal provider missing');
+  let server = (await api(prefix + '/ai-controls/mcp/servers')).find(value => value.id === 'dashboard');
+  if (server && (server.hostname !== apiOrigin + '/api/mcp' || server.auth_type !== 'oauth')) throw new Error('Conflicting Dashboard upstream');
+  if (!server) server = await api(prefix + '/ai-controls/mcp/servers', 'POST', {
+    id: 'dashboard', name: 'Eastmoney Dashboard', hostname: apiOrigin + '/api/mcp', auth_type: 'oauth',
+    is_shared_oauth_callback_enabled: false, client_secret: client.client_secret,
+    auth_credentials: JSON.stringify({ auth_mode: 'manual', config: {
+      issuer: 'https://auth.hasbai.xyz/', authorization_endpoint: 'https://auth.hasbai.xyz/authorize?audience=' + encodeURIComponent(apiOrigin + '/') + '&organization=' + organizationId + '&connection=eastmoney-email',
+      token_endpoint: 'https://auth.hasbai.xyz/oauth/token', revocation_endpoint: 'https://auth.hasbai.xyz/oauth/revoke', resource: apiOrigin + '/',
+    }, registration_info: { client_id: clientId, redirect_uris: [origin + '/servers-callback'], token_endpoint_auth_method: 'client_secret_post', scope: 'openid profile email offline_access' } }),
+  });
+  const apps = await api(prefix + '/apps');
+  let app = apps.find(value => value.destinations?.some(item => item.type === 'via_mcp_server_portal' && item.mcp_server_id === 'dashboard'));
+  if (!app) app = await api(prefix + '/apps', 'POST', {
+    name: 'Eastmoney Dashboard MCP', type: 'mcp', allowed_idps: [provider.id], auto_redirect_to_identity: true,
+    session_duration: '24h', http_only_cookie_attribute: true,
+    destinations: [{ type: 'via_mcp_server_portal', mcp_server_id: 'dashboard' }],
+    policies: [{ name: 'Eastmoney 18.cn users', decision: 'allow', include: [{ email_domain: { domain: '18.cn' } }], require: [{ login_method: { id: provider.id } }], exclude: [] }],
+  });
+  const portal = await api(prefix + '/ai-controls/mcp/portals/eastmoney');
+  const others = (portal.servers ?? []).filter(item => item.server_id !== 'dashboard');
+  const existing = portal.servers?.find(item => item.server_id === 'dashboard');
+  const servers = [...others, { ...existing, server_id: 'dashboard', on_behalf: true, default_disabled: false }];
+  await api(prefix + '/ai-controls/mcp/portals/eastmoney', 'PUT', {
+    name: portal.name, hostname: portal.hostname, description: portal.description, code_mode: portal.code_mode,
+    secure_web_gateway: portal.secure_web_gateway, servers,
+  });
+  const verified = await api(prefix + '/ai-controls/mcp/portals/eastmoney');
+  if (!verified.servers?.some(item => item.server_id === 'dashboard' && item.on_behalf === true)
+    || !isDeepStrictEqual(verified.servers.filter(item => item.server_id !== 'dashboard'), others)) throw new Error('Portal server preservation/readback failed');
+  console.log(JSON.stringify({ server: server.id, application: app.id, endpoint: apiOrigin + '/api/mcp', onBehalf: true, preservedServers: others.map(item => item.server_id) }));
 } else if (mode === 'organization' || mode === 'organization-plan') {
   const provider = (await api(prefix + '/identity_providers')).find(value => value.name === 'Eastmoney MCP Auth0');
   const data = await api(prefix + '/ai-controls/mcp/servers/data');
@@ -99,7 +135,7 @@ if (mode === 'upstreams') {
   await configureClientRedirects(portalApp.id);
   const portal = await api(prefix + '/ai-controls/mcp/portals/eastmoney');
   await api(prefix + '/ai-controls/mcp/portals/eastmoney', 'PUT', { name: portal.name, hostname: portal.hostname, description: portal.description, code_mode: 'off', secure_web_gateway: false,
-    servers: [{ server_id: 'data', on_behalf: true, default_disabled: false }, { server_id: 'research', on_behalf: false, default_disabled: false }] });
+    servers: [...(portal.servers ?? []).filter(item => !['data', 'research'].includes(item.server_id)), { server_id: 'data', on_behalf: true, default_disabled: false }, { server_id: 'research', on_behalf: false, default_disabled: false }] });
   const records = await api(`zones/${zone}/dns_records?name=mcp.hasbai.xyz`);
   if (records.length && !records.every(record => record.type === 'CNAME' && record.content === 'gateway.agents.cloudflare.com' && record.proxied)) throw new Error('Conflicting portal DNS; inspect before changing');
   if (!records.length) await api(`zones/${zone}/dns_records`, 'POST', { type: 'CNAME', name: 'mcp.hasbai.xyz', content: 'gateway.agents.cloudflare.com', proxied: true, ttl: 1 });
@@ -108,4 +144,4 @@ if (mode === 'upstreams') {
   const app = (await api(prefix + '/apps')).find(value => value.domain === 'mcp.hasbai.xyz');
   if (!app) throw new Error('MCP portal application missing');
   await configureClientRedirects(app.id);
-} else throw new Error('Expected upstreams, applications, client-redirects, organization-plan or organization');
+} else throw new Error('Expected upstreams, dashboard, applications, client-redirects, organization-plan or organization');

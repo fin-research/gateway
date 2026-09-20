@@ -11,6 +11,8 @@ const cookies = new SessionCookies();
 const config = await readAuthTestConfig();
 let passwordSent = false;
 const reauthorizeData = process.argv.includes('--reauthorize-data');
+const includeDashboard = process.argv.includes('--dashboard');
+const upstreams = includeDashboard ? ['data', 'research', 'dashboard'] : ['data', 'research'];
 const checkCatalog = process.argv.includes('--check-catalog');
 let dataReauthorizationStarted = false;
 if (checkCatalog && !process.env.CLOUDFLARE_API_TOKEN) throw new Error('--check-catalog requires a Keychain-backed MCP Portals task token');
@@ -85,12 +87,12 @@ async function follow(start, stopOnServerCallback = false) {
           dataReauthorizationStarted = true;
           console.log(JSON.stringify({ dataReauthorizationStarted: true, identity: config.email }));
         }
-        const needsAuth = bootstrap.servers?.find(server => server.id === 'data' && server.status === 'needs_auth' && (server.authorizeUrl || server.authorize_url));
+        const needsAuth = bootstrap.servers?.find(server => upstreams.includes(server.id) && server.status === 'needs_auth' && (server.authorizeUrl || server.authorize_url));
         if (needsAuth && reauthorizeData) dataReauthorizationStarted = true;
         if (needsAuth) { url = checked(needsAuth.authorizeUrl || needsAuth.authorize_url, url); method = 'GET'; body = undefined; continue; }
-        if (['data', 'research'].every(id => bootstrap.servers.some(server => server.id === id && server.status === 'connected'))) {
+        if (upstreams.every(id => bootstrap.servers.some(server => server.id === id && server.status === 'connected'))) {
           const values = new URLSearchParams(Object.entries(bootstrap.hiddenFields || {}).map(([name, value]) => [name, String(value)]));
-          for (const id of ['data', 'research']) values.append('servers', id);
+          for (const id of upstreams) values.append('servers', id);
           values.set('state', Buffer.from(JSON.stringify({ as: bootstrap.authSessionId })).toString('base64url'));
           url = checked(bootstrap.finishAction, url); method = 'POST'; body = values.toString(); continue;
         }
@@ -192,15 +194,26 @@ try {
   const search = await rpc(portal + '/mcp', tokens.access_token, 'tools/call', { name: 'research_search', arguments: { query: '债券发行', ai_search_options: { retrieval: { max_num_results: 50, metadata_only: true, filters: { published_at: { $gte: start - 6 * day, $lte: start + day - 1 } } } } } }, 4, list.sessionId);
   if (search.result?.isError || !Array.isArray(search.result?.content) || !search.result.content.length) throw new Error('Managed research tool failed');
   console.log(JSON.stringify({ managedToolsVerified: true, dataHealth: healthData.status, researchSearch: true, browserUsed: false }));
-  if (checkCatalog) {
-    const response = await fetch('https://api.cloudflare.com/client/v4/accounts/5cecc63c78acf8f5473f8745f4244448/access/ai-controls/mcp/servers/data', {
+  if (includeDashboard) {
+    const required = ['dashboard_health', 'dashboard_credit_report', 'dashboard_create_project', 'dashboard_update_credit_institution', 'dashboard_generate_market_focus', 'dashboard_generate_tracking_commentary', 'dashboard_ask_credit_assistant'];
+    if (!required.every(name => names.includes(name))) throw new Error('Dashboard query/write/AI tools missing');
+    const health = await rpc(portal + '/mcp', tokens.access_token, 'tools/call', { name: 'dashboard_health', arguments: {} }, 5, list.sessionId);
+    if (health.result?.isError || health.result?.structuredContent?.status !== 'ok') throw new Error('Dashboard health failed');
+    const read = await rpc(portal + '/mcp', tokens.access_token, 'tools/call', { name: 'dashboard_financing_projects', arguments: {} }, 6, list.sessionId);
+    if (read.result?.isError || !read.result?.structuredContent?.data) throw new Error('Dashboard business read failed');
+    const invalid = await rpc(portal + '/mcp', tokens.access_token, 'tools/call', { name: 'dashboard_update_credit_institution', arguments: { body: {} } }, 7, list.sessionId);
+    if (!invalid.result?.isError) throw new Error('Invalid Dashboard write input was not rejected');
+    console.log(JSON.stringify({ dashboardVerified: true, tools: names.filter(name => name.startsWith('dashboard_')).length, businessRead: true, invalidWriteRejected: true }));
+  }
+  if (checkCatalog) for (const upstream of includeDashboard ? ['data', 'dashboard'] : ['data']) {
+    const response = await fetch('https://api.cloudflare.com/client/v4/accounts/5cecc63c78acf8f5473f8745f4244448/access/ai-controls/mcp/servers/' + upstream, {
       headers: { Authorization: 'Bearer ' + process.env.CLOUDFLARE_API_TOKEN }, redirect: 'error', signal: AbortSignal.timeout(30000),
     });
     const value = await response.json();
     if (!response.ok || value.success !== true) throw new Error('Cloudflare Data catalog read failed');
     const server = value.result;
-    const catalog = server.tools?.map(tool => 'data_' + tool.name).sort() ?? [];
-    const live = names.filter(name => name.startsWith('data_')).sort();
+    const catalog = server.tools?.map(tool => upstream + '_' + tool.name).sort() ?? [];
+    const live = names.filter(name => name.startsWith(upstream + '_')).sort();
     const verified = server.status === 'ready' && server.authentication_status === 'manual'
       && Boolean(server.last_successful_sync) && live.length > 0 && JSON.stringify(catalog) === JSON.stringify(live);
     console.log(JSON.stringify({ catalogVerified: verified, status: server.status, authenticationStatus: server.authentication_status,
