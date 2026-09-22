@@ -119,7 +119,7 @@ Auth0 本组织角色 `admin` 为全站管理员；`scripts/provision-site-admin
 
 管理个人页面 `/management/me`、`/management/permissions`、`/management/notifications` 和本人通知设置/设备 API 仅要求登录；原后台管理、权限缓存刷新和资金日报上传要求 admin。未知路由仍失败关闭。manifest、Service Worker、离线页与两张 PWA 图标使用精确公开白名单。
 
-私有 IdentityService `/directory/notification-users` 提供当前有效本站用户的通知类别资格，由 Dashboard NotificationSource 转给 Messenger，不包含联系方式。Workflow 类仅管理员可用。角色成员变化仍按现有签名会话更新语义；消息投递资格查询使用当前目录，不信任客户端订阅传入的角色。
+消息投递仅依据 Messenger D1 中保存的订阅、联系方式和设备；Gateway 不提供通知资格查询。通知设置页面的登录与角色边界仍由本站既有会话和路由管理，发送时不回查 Auth0。
 
 ## 融资客户名单
 

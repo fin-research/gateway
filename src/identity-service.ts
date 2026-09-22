@@ -1,16 +1,14 @@
 import { mcpBridge } from './mcp-bridge.ts';
-import { z } from 'zod';
 import { Buffer } from 'node:buffer';
 import { createDirectory } from './lib/server/auth0-directory.ts';
 import { createProfileService, ProfileError, readProfileJson } from './lib/server/profile.ts';
 import { AccessError, accessFailure } from './lib/server/access.ts';
 import { permissionCache } from './lib/server/permission-cache.ts';
-import { hasPermission, PERMISSION_CODES } from './lib/permissions.ts';
+import { hasPermission } from './lib/permissions.ts';
 import { CONTEXT_HEADER, type GatewayContext } from './forward.ts';
 import { clearSession } from './session.ts';
 
 const privateHeaders = { 'Cache-Control': 'no-store, private', Vary: 'Cookie, Authorization' };
-const notificationUserIdsSchema = z.array(z.string().regex(/^auth0\|[^\s]{1,249}$/)).min(1).max(100);
 export async function profileRequest(request: Request, env: Env, user: GatewayContext['user']) {
   const headers = new Headers(privateHeaders);
   try {
@@ -32,21 +30,6 @@ export async function identityService(request: Request, env: Env): Promise<Respo
   try {
     const path = new URL(request.url).pathname;
     const directory = createDirectory(env);
-    if (request.method === 'GET' && path === '/directory/notification-users') {
-      const search = new URL(request.url).searchParams;
-      const filter = search.has('userId') ? notificationUserIdsSchema.safeParse(search.getAll('userId')) : null;
-      if (filter && !filter.success) return Response.json({ detail: 'Invalid notification users' }, { status: 400, headers: privateHeaders });
-      const userIds = filter?.success ? [...new Set(filter.data)] : undefined;
-      const snapshot = await permissionCache(env).snapshot();
-      const people = await directory.people(userIds);
-      return Response.json(people.filter(person => person.active).map(person => {
-        const admin = person.roles.some(role => role.name === 'admin' && snapshot.roles.some(current => current.id === role.id && current.name === 'admin'));
-        const permissions = admin ? [...PERMISSION_CODES] : person.roles.flatMap(role => snapshot.configurations[role.id]?.permissions ?? []);
-        return { id: person.id, categories: [ ...(admin ? ['workflow'] : []),
-          ...(permissions.includes('research.workspace:read') ? ['trading'] : []),
-          ...(permissions.includes('financing.project:read') ? ['financing'] : []) ] };
-      }), { headers: privateHeaders });
-    }
     if (request.method === 'GET' && path === '/directory/people') return Response.json(await directory.people(), { headers: privateHeaders });
     if (request.method === 'GET' && path === '/directory/roles') return Response.json(await directory.roles(), { headers: privateHeaders });
     const context: GatewayContext = JSON.parse(Buffer.from(request.headers.get(CONTEXT_HEADER) ?? '', 'base64url').toString('utf8'));
