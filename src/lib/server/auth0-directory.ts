@@ -41,6 +41,19 @@ export function createDirectory(config: Config, fetchImpl: typeof fetch = fetch)
     const allowed = new Set((await roles()).map(role => role.id));
     return z.array(roleSchema).parse(await manager.list(`${org}/members/${encodeURIComponent(id)}/roles`)).filter(role => allowed.has(role.id));
   }
+  async function readPeople(userIds?: readonly string[]) {
+    const people: DirectoryPerson[] = [];
+    const organizationMembers = await members();
+    const selected = userIds === undefined ? organizationMembers : new Set(userIds);
+    // Membership and status are checked live. Never read unrelated user profiles.
+    for (const id of selected) {
+      if (!organizationMembers.has(id)) continue;
+      const profile = await user(id);
+      people.push({ id, name: profile.name || profile.email, email: profile.email,
+        active: auth0ProfileCanLogin(profile), roles: await userRoles(id) });
+    }
+    return people.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+  }
   return {
     roles, user, userRoles,
     async current(identity: SiteIdentity, includeRoles = true) {
@@ -52,18 +65,9 @@ export function createDirectory(config: Config, fetchImpl: typeof fetch = fetch)
       if (!auth0ProfileCanLogin(profile)) throw new AccessError(403, '账号已停用或邮箱尚未验证');
       return { name: profile.name || profile.email, department: typeof profile.user_metadata?.department === 'string' ? profile.user_metadata.department.trim().slice(0, 100) : '', roles: includeRoles ? await userRoles(identity.auth0Id) : [], picture: profile.picture ?? '' };
     },
-    people() {
-      return peopleRequest ??= (async () => {
-        const people: DirectoryPerson[] = [];
-        // Only organization members are read, with bounded sequential requests.
-        // Auth0 organization membership responses omit account status/metadata.
-        for (const id of await members()) {
-          const profile = await user(id);
-          people.push({ id, name: profile.name || profile.email, email: profile.email,
-            active: auth0ProfileCanLogin(profile), roles: await userRoles(id) });
-        }
-        return people.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
-      })();
+    people(userIds?: readonly string[]) {
+      if (userIds !== undefined) return userIds.length ? readPeople(userIds) : Promise.resolve([]);
+      return peopleRequest ??= readPeople();
     },
   };
 }
