@@ -19,7 +19,7 @@ export function dashboardPolicy(request: Request) { return requestPolicy(request
 
 export const PUBLIC_DATA_RESOURCES = new Set([
   '/chinamoney/shibor', '/health', '/config', '/docs', '/redoc', '/openapi.json', '/omo', '/cfets', '/cfets-histories', '/bond-top-case',
-  '/futures-latest', '/margin', '/industry', '/stock-summary', '/primary-issues', '/broker-bond-registrations',
+  '/futures-latest', '/margin', '/industry', '/trading-days', '/stock-summary', '/primary-issues', '/broker-bond-registrations',
   '/today-trades', '/favorite-quotes', '/bond-infos', '/news', '/wechat-articles',
 ]);
 export function publicDataRead(request: Request): boolean {
