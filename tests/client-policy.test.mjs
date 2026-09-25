@@ -18,7 +18,7 @@ test('generated client preflights agree with server methods, dynamic paths, alia
     const url = new URL(path, 'https://eastmoney.hasbai.xyz');
     const method = path.includes('/rpc/') ? 'POST' : 'GET';
     const server = requestPolicy(new Request(url, { method }), matchDashboardRoute(url.pathname));
-    assert.equal(clientRequestPermission(url, method), server.permission);
+    assert.equal(clientRequestPermission(url, method), server.login ? 'login' : server.permission);
   }
   for (const path of ['/financing/projects?/createProject&/deleteProject', '/financing/projects?/deleteProject&/deleteProject', '/api/%2fcredit', '/api/credit?/%20']) {
     assert.equal(clientRequestPermission(new URL(path, 'https://eastmoney.hasbai.xyz'), 'POST'), undefined);

@@ -43,16 +43,21 @@ try {
   const bootstrap = await payload('/trading-research/research/__data.json?x-sveltekit-invalidated=11');
   assert.equal(bootstrap.type, 'data'); assert.deepEqual(bootstrap.nodes[0].uses.dependencies, ['site:session']);
   assert.ok(!bootstrap.nodes[0].uses.url); checks++;
-  for (const path of ['/trading-research/market-hotspots', '/trading-research/policy-tracking', '/credit-workbench/calendar', '/profile']) {
+  for (const path of ['/trading-research/market-hotspots', '/trading-research/policy-tracking', '/credit-workbench/calendar']) {
     const result = await payload(path + '/__data.json?x-sveltekit-invalidated=01');
     assert.equal(result.nodes[0].type, 'skip'); checks++;
   }
+  assert.deepEqual(await payload('/profile/__data.json?x-sveltekit-invalidated=01'),
+    { type: 'redirect', location: '/management/me' }); checks++;
   for (const path of ['/profile', '/trading-research', '/credit-workbench']) {
     const response = await respond(path, false, { headers: { Accept: 'text/html' } });
     assert.equal(response.status, 303); checks++;
     const dataResponse = await respond(path + '/__data.json', false);
     assert.deepEqual(await dataResponse.json(), { type: 'redirect', location: '/auth/login?returnTo=' + encodeURIComponent(path) }); checks++;
-    assert.equal((await respond(path)).status, 200, path); checks++;
+    const signed = await respond(path);
+    assert.equal(signed.status, path === '/profile' ? 303 : 200, path);
+    if (path === '/profile') assert.equal(signed.headers.get('location'), '/management/me');
+    checks++;
   }
   const notice = await respond('/auth/verify-email?state=opaque&email=must-not-render%4018.cn', false);
   assert.equal(notice.status, 200); assert.doesNotMatch(await notice.text(), /opaque|must-not-render/); checks++;
@@ -74,8 +79,8 @@ try {
   assert.equal(badUpload.status, 401); assert.equal(storage.size, 0); checks++;
   const profile = await payload('/api/profile'); assert.equal(profile.email, 'test@18.cn'); checks++;
   f.updateProfile({ blocked: true });
-  assert.equal((await respond('/profile/__data.json')).status, 200); checks++;
+  assert.equal((await respond('/management/me/__data.json')).status, 200); checks++;
   f.updateProfile({ blocked: false, email: 'changed@18.cn' });
-  assert.equal((await (await respond('/profile/__data.json')).json()).type, 'data'); checks++;
+  assert.equal((await (await respond('/management/me/__data.json')).json()).type, 'data'); checks++;
   console.log(JSON.stringify({ integration: true, checks, gateway: 'Hono', dashboard: 'built SvelteKit', data: 'bundled real handler', externalServices: 'mocked', browserUsed: false }));
 } finally { for (const fn of cleanup) fn(); await rm(directory, { recursive: true, force: true }); }

@@ -51,7 +51,7 @@ test('anonymous and test@18.cn cover all registered routes and actions through c
       return (method === 'GET' ? ['GET', 'HEAD'] : [method]).map(verb => ({ id, path, method: verb, scope }));
     }));
     cases.push(
-      { id: '/credit-workbench/[[view]]', path: '/credit-workbench/assistant', method: 'GET', scope: 'credit.assistant:read' },
+      { id: '/credit-workbench/[[view]]', path: '/credit-workbench/assistant', method: 'GET', scope: 'login' },
       { id: '/trading-research/[view]', path: '/trading-research/market-hotspots', method: 'GET', scope: 'research.hotspot:read' },
       { id: '/trading-research/[view]', path: '/trading-research/secondary-bond-pool', method: 'GET', scope: 'bond.ledger:read' },
       { id: '/data/[...path]', path: '/data/news', method: 'GET', scope: 'data.resource:read' },
