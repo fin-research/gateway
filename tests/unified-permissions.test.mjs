@@ -15,8 +15,8 @@ test('read and write policies are distinct, and unknown routes/actions and ambig
   assert.deepEqual(requestPolicy(request('/api/market-resources/omo'), '/api/market-resources/[resource]'), { public: true });
   assert.equal(requestPolicy(request('/financing/projects'), '/financing/projects').permission, 'financing.project:read');
   assert.equal(requestPolicy(request('/financing/projects?/createProject','POST'), '/financing/projects').permission, 'financing.project:create');
-  assert.equal(requestPolicy(request('/api/credit-assistant/session','DELETE'), '/api/credit-assistant/session').permission, 'credit.assistant:delete');
-  assert.equal(requestPolicy(request('/api/credit-assistant/session/events'), '/api/credit-assistant/session/events').permission, 'credit.assistant:read');
+  assert.equal(requestPolicy(request('/api/credit-assistant/session','DELETE'), '/api/credit-assistant/session').login, true);
+  assert.equal(requestPolicy(request('/api/credit-assistant/session/events'), '/api/credit-assistant/session/events').login, true);
   assert.throws(() => requestPolicy(request('/api/credit-assistant/session/events','POST'), '/api/credit-assistant/session/events'), { status: 403 });
   assert.equal(requestPolicy(request('/data/graphql','POST'), '/data/[...path]').permission, 'data.graphql:read');
   assert.equal(requestPolicy(request('/data/choice/css','POST'), '/data/[...path]').login, true);
@@ -68,12 +68,14 @@ test('Auth0 roles are paginated and no user/role tables or permission writes are
 
 test('client navigation and legacy workbench aliases require the same resource permission as their destination', () => {
  for(const [path,route,permission] of [
-   ['/credit-workbench/assistant/__data.json','/credit-workbench/[[view]]','credit.assistant:read'],
    ['/trading-research/secondary-bond-pool/__data.json','/trading-research/[view]','bond.ledger:read'],
    ['/trading-research/tracking-commentary','/trading-research/[view]','research.policy:read'],
    ['/trading-research/bond','/trading-research/[view]','bond.ledger:read'],
-   ['/trading-research/credit-assistant','/trading-research/[view]','credit.assistant:read'],
  ]) assert.equal(requestPolicy(request(path),route).permission,permission);
+ for (const [path, route] of [
+   ['/credit-workbench/assistant/__data.json', '/credit-workbench/[[view]]'],
+   ['/trading-research/credit-assistant', '/trading-research/[view]'],
+ ]) assert.equal(requestPolicy(request(path), route).login, true);
 });
 
 test('runtime authorization and role view have no database authorization fallback', async () => {

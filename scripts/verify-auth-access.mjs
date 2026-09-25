@@ -19,7 +19,7 @@ export const ACCESS_PROBES = [
   ['research.economic_indicator:read', '/api/economic-indicators', [200]],
   ['bond.ledger:read', '/secondary-bond-pool', [200]],
   ['credit.institution:read', '/credit-workbench', [200]],
-  ['credit.assistant:read', '/credit-workbench/assistant', [200]],
+  ['login', '/credit-workbench/assistant', [200]],
   ['fund.report:read', '/fund-report', [200]],
   ['model.financing:read', '/financing-model', [200]],
   ['financing.overview:read', '/financing', [200]],

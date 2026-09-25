@@ -33,7 +33,7 @@ export const ROUTE_PERMISSIONS: Record<string, Methods> = {
   '/api/trading-workflow/config': { GET: 'research.workspace:read', PUT: 'research.workflow:update' },
   '/api/economic-indicators': { GET: 'research.economic_indicator:read' },
   '/credit-workbench/[[view]]': { GET: 'credit.institution:read' },
-  '/credit-assistant': { GET: 'credit.assistant:read' },
+  '/credit-assistant': { GET: 'login' },
   '/api/credit': { GET: 'credit.institution:read', PATCH: 'credit.institution:update', POST: 'credit.institution:update' },
   '/bond': { GET: 'bond.ledger:read' }, '/bond-ledger': { GET: 'bond.ledger:read' },
   '/secondary-bond-pool': { GET: 'bond.ledger:read' },
@@ -75,13 +75,10 @@ export const ROUTE_PERMISSIONS: Record<string, Methods> = {
   '/financing/data/token': { GET: 'financing.data:read' },
   '/financing/data/import': { POST: 'financing.data:import' },
   '/financing/liability-report': { GET: 'financing.report:read', 'POST:saveSnapshot': 'financing.report:generate' },
-  '/api/credit-assistant/institutions': { GET: 'credit.assistant:read' },
-  '/api/credit-assistant/materials': { GET: 'credit.assistant:read' },
-  '/api/credit-assistant/files/[id]': { GET: 'credit.assistant:read' },
-  '/api/credit-assistant/session': { GET: 'credit.assistant:read', POST: 'credit.assistant:ask', DELETE: 'credit.assistant:delete' },
-  '/api/credit-assistant/session/events': { GET: 'credit.assistant:read' },
-  '/api/credit-assistant/session/new': { POST: 'credit.assistant:ask' },
-  '/api/credit-assistant/session/institution': { POST: 'credit.assistant:ask' },
+  '/api/credit-assistant/files/[id]': { GET: 'login' },
+  '/api/credit-assistant/session': { GET: 'login', POST: 'login', DELETE: 'login' },
+  '/api/credit-assistant/session/events': { GET: 'login' },
+  '/api/credit-assistant/session/new': { POST: 'login' },
 };
 
 /** Shared GET policy for client navigation and the server request boundary. */
@@ -89,9 +86,10 @@ export function pagePermission(pathname: string, routeId: string | null): Method
   let path: string;
   try { path = decodeURIComponent(pathname).replace(/\/__data\.json$/, '').replace(/\/$/, '') || '/'; }
   catch { return undefined; }
-  if (routeId === '/credit-workbench/[[view]]' && path.endsWith('/assistant')) return 'credit.assistant:read';
+  if (routeId === '/credit-workbench/[[view]]' && path.endsWith('/assistant')) return 'login';
   if (routeId === '/trading-research/[view]') {
-    const views: Record<string, PermissionCode> = { 'market-hotspots': 'research.hotspot:read', 'policy-tracking': 'research.policy:read', 'tracking-commentary': 'research.policy:read', 'secondary-bond-pool': 'bond.ledger:read', 'bond': 'bond.ledger:read', 'financing-model': 'model.financing:read', 'credit': 'credit.institution:read', 'credit-assistant': 'credit.assistant:read' };
+    if (path.endsWith('/credit-assistant')) return 'login';
+    const views: Record<string, PermissionCode> = { 'market-hotspots': 'research.hotspot:read', 'policy-tracking': 'research.policy:read', 'tracking-commentary': 'research.policy:read', 'secondary-bond-pool': 'bond.ledger:read', 'bond': 'bond.ledger:read', 'financing-model': 'model.financing:read', 'credit': 'credit.institution:read' };
     return views[path.split('/').pop() ?? ''] ?? ROUTE_PERMISSIONS[routeId]?.GET;
   }
   return ROUTE_PERMISSIONS[routeId ?? '']?.GET;
