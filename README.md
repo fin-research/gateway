@@ -8,8 +8,6 @@ Dashboard → IdentityService → Gateway
 Dashboard / Ingest → InternalData → Data
 ```
 
-Dashboard/Data 不公开 origin，也不验证 JWT。Gateway 的权限准入与应用的记录归属、业务状态、输入校验、RLS、材料保密检查共同构成完整边界。
+Dashboard/Data 不公开 origin，也不验证 JWT。Gateway 负责权限准入；应用分别校验记录归属、业务状态、输入、RLS 和材料访问等领域规则。
 
-开始开发阅读 [AGENTS](AGENTS.md)；配置、测试及跨仓库切换见 [DEVELOPMENT](docs/DEVELOPMENT.md)，完整权限范围见项目组 [AUTH](../eastmoney/docs/AUTH.md)。
-
-本次切换与测试证据见 [VALIDATION](docs/VALIDATION.md)。
+开发约定见 [AGENTS](AGENTS.md)，配置与验证见 [DEVELOPMENT](docs/DEVELOPMENT.md)，共享认证边界见项目组 [AUTH](../eastmoney/docs/AUTH.md)。具体权限与路由以 [Gateway 目录](src/lib/permissions.ts) 和 [路由策略](src/lib/route-permissions.ts) 为准。
