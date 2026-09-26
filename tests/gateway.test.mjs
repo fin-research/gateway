@@ -42,6 +42,7 @@ test('real URL matching covers every registered route and method/action without 
     assert.equal((await gatewayRequest(f.request(path, { method, token }), f.env)).status, 403, path);
   }
   assert.equal((await gatewayRequest(f.request('/financing/projects?/createProject', { token, method: 'POST', headers: { Origin: 'https://other.test' } }), f.env)).status, 403);
+  assert.equal((await gatewayRequest(f.request('/api/ai/responses', { token, method: 'POST', headers: { Origin: 'https://other.test' } }), f.env)).status, 403);
 });
 
 test('public Data resource/method matrix never calls identity, and protected resources cannot use spoofed headers', async t => {
