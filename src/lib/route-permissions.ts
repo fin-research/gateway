@@ -5,6 +5,7 @@ type Methods = Partial<Record<string, PermissionCode | 'public' | 'login' | 'adm
 export const ROUTE_PERMISSIONS: Record<string, Methods> = {
   '/': { GET: 'public' },
   '/api/mcp': { GET: 'login', POST: 'login', DELETE: 'login' },
+  '/api/ai/responses': { POST: 'login' },
   '/auth/login': { GET: 'login' }, '/auth/logout': { GET: 'public', POST: 'public' },
   '/auth/session': { GET: 'public' }, '/auth/verify-email': { GET: 'public' },
   '/market-briefing': { GET: 'public' },

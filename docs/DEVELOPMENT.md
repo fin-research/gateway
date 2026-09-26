@@ -14,6 +14,8 @@ Gateway 是独立 Hono Worker。用户、角色与成员关系属于 Auth0；JWT
 
 Dashboard 只在 `GatewayDashboard` 解析上下文并注入请求内 env；默认入口固定 404。Data 只在 `GatewayData` 消费授权结果，原 `InternalData` 供 Dashboard/Ingest 机器调用。两后端不得恢复公网 routes、workers.dev、preview 或 Custom Domain。
 
+`POST /api/ai/responses` 只向已登录用户放行，并执行 Cookie 请求的同源校验。Dashboard 将流式 Responses 请求转发到固定 Cloudflare AI Gateway 模型，Gateway 与浏览器均不接触上游密钥；浏览器用本站 HttpOnly 会话 Cookie 调用。
+
 ## 配置与本地验证
 
 ```sh
