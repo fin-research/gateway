@@ -69,7 +69,7 @@ Auth0 登录 Action 将业务信息签入一个短的 `user` claim：`user.roles
 
 ## MCP 与错误语义
 
-统一入口由 Cloudflare MCP Portals 提供；端点、Auth0 和 Keychain 配置见 [MCP](MCP.md)。Gateway 的旧 `/mcp` 已退役。`pnpm auth:verify` 含真实 MCP 初始化、工具目录、只读调用和输入错误探针。匿名保护请求先返回 401；已登录的未登记入口返回 403 `ROUTE_NOT_REGISTERED`，账号拒绝仍为 `ACCESS_DENIED`。
+统一入口由 Cloudflare MCP Portals 提供；端点、Auth0 和 Cloudflare 凭据配置见 [MCP](MCP.md)。Gateway 的旧 `/mcp` 已退役。`pnpm auth:verify` 含真实 MCP 初始化、工具目录、只读调用和输入错误探针。匿名保护请求先返回 401；已登录的未登记入口返回 403 `ROUTE_NOT_REGISTERED`，账号拒绝仍为 `ACCESS_DENIED`。
 
 ## 身份接口限流恢复
 

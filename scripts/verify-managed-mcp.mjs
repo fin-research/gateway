@@ -15,7 +15,7 @@ const includeDashboard = process.argv.includes('--dashboard');
 const upstreams = includeDashboard ? ['data', 'research', 'dashboard'] : ['data', 'research'];
 const checkCatalog = process.argv.includes('--check-catalog');
 let dataReauthorizationStarted = false;
-if (checkCatalog && !process.env.CLOUDFLARE_API_TOKEN) throw new Error('--check-catalog requires a Keychain-backed MCP Portals task token');
+if (checkCatalog && !process.env.CLOUDFLARE_API_TOKEN) throw new Error('--check-catalog requires CLOUDFLARE_API_TOKEN; use project cloudflare_env.py');
 if (process.argv.includes('--data-only') && (reauthorizeData || checkCatalog)) throw new Error('Portal verification options cannot be used with --data-only');
 
 function checked(value, base) {
