@@ -223,11 +223,15 @@ try {
     const server = value.result;
     const catalog = server.tools?.map(tool => upstream + '_' + tool.name).sort() ?? [];
     const live = names.filter(name => name.startsWith(upstream + '_')).sort();
+    const snapshotMatchesLive = JSON.stringify(catalog) === JSON.stringify(live);
+    // Cloudflare captures manual-OAuth capabilities on first authorization;
+    // later user catalogs can change without refreshing that admin snapshot.
     const verified = server.status === 'ready' && server.authentication_status === (upstream === 'credit' ? 'not_required' : 'manual')
-      && Boolean(server.last_successful_sync) && live.length > 0 && JSON.stringify(catalog) === JSON.stringify(live);
-    console.log(JSON.stringify({ catalogVerified: verified, status: server.status, authenticationStatus: server.authentication_status,
-      toolCount: catalog.length, lastSuccessfulSync: server.last_successful_sync }));
-    if (!verified) throw new Error('Cloudflare Data catalog is not Ready or differs from the live user catalog');
+      && Boolean(server.last_successful_sync) && live.length > 0 && (upstream !== 'credit' || snapshotMatchesLive);
+    console.log(JSON.stringify({ upstream, catalogVerified: verified, snapshotMatchesLive, status: server.status,
+      authenticationStatus: server.authentication_status, catalogTools: catalog.length, liveTools: live.length,
+      missingFromSnapshot: live.filter(name => !catalog.includes(name)), lastSuccessfulSync: server.last_successful_sync }));
+    if (!verified) throw new Error(`Cloudflare ${upstream} catalog is not Ready or differs from the live user catalog`);
   }
   }
 } catch (error) {
