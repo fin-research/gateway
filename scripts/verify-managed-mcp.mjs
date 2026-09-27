@@ -12,11 +12,12 @@ const config = await readAuthTestConfig();
 let passwordSent = false;
 const reauthorizeData = process.argv.includes('--reauthorize-data');
 const includeDashboard = process.argv.includes('--dashboard');
-const upstreams = includeDashboard ? ['data', 'research', 'dashboard'] : ['data', 'research'];
+const includeCredit = process.argv.includes('--credit');
+const upstreams = ['data', 'research', ...(includeDashboard ? ['dashboard'] : []), ...(includeCredit ? ['credit'] : [])];
 const checkCatalog = process.argv.includes('--check-catalog');
 let dataReauthorizationStarted = false;
-if (checkCatalog && !process.env.CLOUDFLARE_API_TOKEN) throw new Error('--check-catalog requires a Keychain-backed MCP Portals task token');
-if (process.argv.includes('--data-only') && (reauthorizeData || checkCatalog)) throw new Error('Portal verification options cannot be used with --data-only');
+if (checkCatalog && !process.env.CLOUDFLARE_API_TOKEN) throw new Error('--check-catalog requires an MCP Portals Read API token');
+if (process.argv.includes('--data-only') && (reauthorizeData || checkCatalog || includeDashboard || includeCredit)) throw new Error('Portal verification options cannot be used with --data-only');
 
 function checked(value, base) {
   const url = new URL(value, base);
@@ -205,7 +206,15 @@ try {
     if (!invalid.result?.isError) throw new Error('Invalid Dashboard write input was not rejected');
     console.log(JSON.stringify({ dashboardVerified: true, tools: names.filter(name => name.startsWith('dashboard_')).length, businessRead: true, invalidWriteRejected: true }));
   }
-  if (checkCatalog) for (const upstream of includeDashboard ? ['data', 'dashboard'] : ['data']) {
+  if (includeCredit) {
+    if (!names.includes('credit_search')) throw new Error('Native Credit AI Search tool missing');
+    const credit = await rpc(portal + '/mcp', tokens.access_token, 'tools/call', {
+      name: 'credit_search', arguments: { query: '加权平均净资产收益率', ai_search_options: { retrieval: { max_num_results: 3, metadata_only: true } } },
+    }, 8, list.sessionId);
+    if (credit.result?.isError || !Array.isArray(credit.result?.content) || !credit.result.content.length) throw new Error('Native Credit AI Search failed');
+    console.log(JSON.stringify({ creditVerified: true, tool: 'credit_search', resultItems: credit.result.content.length, browserUsed: false }));
+  }
+  if (checkCatalog) for (const upstream of ['data', ...(includeDashboard ? ['dashboard'] : []), ...(includeCredit ? ['credit'] : [])]) {
     const response = await fetch('https://api.cloudflare.com/client/v4/accounts/5cecc63c78acf8f5473f8745f4244448/access/ai-controls/mcp/servers/' + upstream, {
       headers: { Authorization: 'Bearer ' + process.env.CLOUDFLARE_API_TOKEN }, redirect: 'error', signal: AbortSignal.timeout(30000),
     });
@@ -214,7 +223,7 @@ try {
     const server = value.result;
     const catalog = server.tools?.map(tool => upstream + '_' + tool.name).sort() ?? [];
     const live = names.filter(name => name.startsWith(upstream + '_')).sort();
-    const verified = server.status === 'ready' && server.authentication_status === 'manual'
+    const verified = server.status === 'ready' && server.authentication_status === (upstream === 'credit' ? 'not_required' : 'manual')
       && Boolean(server.last_successful_sync) && live.length > 0 && JSON.stringify(catalog) === JSON.stringify(live);
     console.log(JSON.stringify({ catalogVerified: verified, status: server.status, authenticationStatus: server.authentication_status,
       toolCount: catalog.length, lastSuccessfulSync: server.last_successful_sync }));

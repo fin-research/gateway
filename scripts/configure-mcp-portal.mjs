@@ -1,5 +1,5 @@
-// Run through cloudflare-task-session.py; task credential comes only from its
-// child environment. Auth0's MCP client secret remains in memory throughout.
+// Run through the project Cloudflare credential wrapper; the API token comes
+// only from its child environment. Auth0's MCP client secret stays in memory.
 import { management } from './lib/auth0-management.mjs';
 import { addChatGptRedirectUris } from './lib/mcp-client-redirects.mjs';
 import { portalServerSettings } from './lib/mcp-portal-servers.mjs';
@@ -91,6 +91,50 @@ if (mode === 'upstreams') {
   if (!verified.servers?.some(item => item.server_id === 'dashboard' && item.on_behalf === true)
     || !isDeepStrictEqual(verified.servers.filter(item => item.server_id !== 'dashboard').map(portalServerSettings), others)) throw new Error('Portal server preservation/readback failed');
   console.log(JSON.stringify({ server: server.id, application: app.id, endpoint: apiOrigin + '/api/mcp', onBehalf: true, preservedServers: others.map(item => item.server_id) }));
+} else if (mode === 'credit' || mode === 'credit-plan') {
+  const planOnly = mode === 'credit-plan';
+  // Native search returns raw indexed snippets; keep the AI Search source
+  // restricted to the already public credit/public/** PDFs.
+  const endpoint = 'https://eastmoney-credit-search.hasbai.xyz/mcp';
+  const portal = await api(prefix + '/ai-controls/mcp/portals/eastmoney');
+  const provider = (await api(prefix + '/identity_providers')).find(value => value.name === 'Eastmoney MCP Auth0');
+  if (!provider) throw new Error('Dedicated portal provider missing');
+  let server = (await api(prefix + '/ai-controls/mcp/servers')).find(value => value.id === 'credit');
+  if (server && (server.hostname !== endpoint || server.auth_type !== 'unauthenticated')) throw new Error('Conflicting Credit AI Search upstream');
+  if (!server && !planOnly) server = await api(prefix + '/ai-controls/mcp/servers', 'POST', {
+    id: 'credit', name: 'Eastmoney Credit Search', hostname: endpoint,
+    auth_type: 'unauthenticated', is_shared_oauth_callback_enabled: false,
+  });
+  const apps = await api(prefix + '/apps');
+  let app = apps.find(value => value.destinations?.some(item => item.type === 'via_mcp_server_portal' && item.mcp_server_id === 'credit'));
+  const allowPolicies = app?.policies?.filter(policy => policy.decision === 'allow');
+  if (app && (app.type !== 'mcp' || !app.allowed_idps?.includes(provider.id)
+    || !app.destinations?.every(item => item.type === 'via_mcp_server_portal' && item.mcp_server_id === 'credit')
+    || !allowPolicies?.length || allowPolicies.some(policy =>
+      (!policy.include?.some(rule => rule.email_domain?.domain === '18.cn')
+        || !policy.require?.some(rule => rule.login_method?.id === provider.id))))) throw new Error('Conflicting Credit MCP Access application');
+  if (!app && !planOnly) app = await api(prefix + '/apps', 'POST', {
+    name: 'Eastmoney Credit Search MCP', type: 'mcp', allowed_idps: [provider.id], auto_redirect_to_identity: true,
+    session_duration: '24h', http_only_cookie_attribute: true,
+    destinations: [{ type: 'via_mcp_server_portal', mcp_server_id: 'credit' }],
+    policies: [{ name: 'Eastmoney 18.cn users', decision: 'allow', include: [{ email_domain: { domain: '18.cn' } }], require: [{ login_method: { id: provider.id } }], exclude: [] }],
+  });
+  const others = (portal.servers ?? []).filter(item => item.server_id !== 'credit').map(portalServerSettings);
+  const existing = portal.servers?.find(item => item.server_id === 'credit');
+  const servers = [...others, { ...(existing ? portalServerSettings(existing) : {}), server_id: 'credit', on_behalf: false, default_disabled: false }];
+  if (planOnly) {
+    console.log(JSON.stringify({ mode, serverExists: Boolean(server), applicationExists: Boolean(app), mapped: Boolean(existing),
+      endpoint, onBehalf: false, preservedServers: others.map(item => item.server_id) }));
+  } else {
+    await api(prefix + '/ai-controls/mcp/portals/eastmoney', 'PUT', {
+      name: portal.name, hostname: portal.hostname, description: portal.description, code_mode: portal.code_mode,
+      secure_web_gateway: portal.secure_web_gateway, servers,
+    });
+    const verified = await api(prefix + '/ai-controls/mcp/portals/eastmoney');
+    if (!verified.servers?.some(item => item.server_id === 'credit' && item.on_behalf === false && item.default_disabled === false)
+      || !isDeepStrictEqual(verified.servers.filter(item => item.server_id !== 'credit').map(portalServerSettings), others)) throw new Error('Credit portal mapping preservation/readback failed');
+    console.log(JSON.stringify({ server: server.id, application: app.id, endpoint, onBehalf: false, preservedServers: others.map(item => item.server_id) }));
+  }
 } else if (mode === 'organization' || mode === 'organization-plan') {
   const provider = (await api(prefix + '/identity_providers')).find(value => value.name === 'Eastmoney MCP Auth0');
   const data = await api(prefix + '/ai-controls/mcp/servers/data');
@@ -145,4 +189,4 @@ if (mode === 'upstreams') {
   const app = (await api(prefix + '/apps')).find(value => value.domain === 'mcp.hasbai.xyz');
   if (!app) throw new Error('MCP portal application missing');
   await configureClientRedirects(app.id);
-} else throw new Error('Expected upstreams, dashboard, applications, client-redirects, organization-plan or organization');
+} else throw new Error('Expected upstreams, dashboard, credit-plan, credit, applications, client-redirects, organization-plan or organization');
