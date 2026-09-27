@@ -42,6 +42,7 @@ export const ROUTE_PERMISSIONS: Record<string, Methods> = {
   '/fund-report': { GET: 'fund.report:read' }, '/fund-report/[date].html': { GET: 'fund.report:read' },
   '/api/fund-report': { POST: 'admin' },
   '/financing-model': { GET: 'model.financing:read' }, '/api/financing-model': { GET: 'model.financing:read' },
+  '/api/financing-model/business-metrics': { GET: 'model.financing:read' },
   '/api/financing-model/conclusion': { PATCH: 'model.conclusion:update' },
   '/api/financing-model/decisions': { GET: 'model.financing:read', POST: 'model.decision:create' },
   '/api/financing-model/sell-side': { POST: 'model.sell_side:generate', PATCH: 'model.sell_side:update' },
