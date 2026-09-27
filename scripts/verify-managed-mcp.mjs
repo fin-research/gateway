@@ -195,7 +195,7 @@ try {
   if (search.result?.isError || !Array.isArray(search.result?.content) || !search.result.content.length) throw new Error('Managed research tool failed');
   console.log(JSON.stringify({ managedToolsVerified: true, dataHealth: healthData.status, researchSearch: true, browserUsed: false }));
   if (includeDashboard) {
-    const required = ['dashboard_health', 'dashboard_credit_report', 'dashboard_create_project', 'dashboard_update_credit_institution', 'dashboard_generate_market_focus', 'dashboard_generate_tracking_commentary', 'dashboard_ask_credit_assistant'];
+    const required = ['dashboard_health', 'dashboard_credit_report', 'dashboard_credit_public_search', 'dashboard_create_project', 'dashboard_update_credit_institution', 'dashboard_generate_market_focus', 'dashboard_generate_tracking_commentary'];
     if (!required.every(name => names.includes(name))) throw new Error('Dashboard query/write/AI tools missing');
     const health = await rpc(portal + '/mcp', tokens.access_token, 'tools/call', { name: 'dashboard_health', arguments: {} }, 5, list.sessionId);
     if (health.result?.isError || health.result?.structuredContent?.status !== 'ok') throw new Error('Dashboard health failed');

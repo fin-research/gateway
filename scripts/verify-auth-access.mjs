@@ -7,7 +7,7 @@ export const ACCESS_PROBES = [
   ['login', '/auth/permissions', [200]],
   ['public', '/market-briefing', [200]],
   ['public', '/market-briefing/text', [200]],
-  ['public', '/api/market-report', [400]],
+  ['public', '/api/market-report?date=invalid', [400]],
   ['public', '/api/market-resources/unknown', [400]],
   ['public', '/data/omo', [422]],
   ['public', '/data/news?pageSize=invalid', [422]],
@@ -115,8 +115,8 @@ async function main() {
     await rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'eastmoney-verification', version: '1' } });
     const list = await rpc('tools/list', {});
     const names = list.tools.map(tool => tool.name);
-    const expected = 24;
-    if (names.length !== expected) failures.push(`${path} tool count`);
+    const expected = 25;
+    if (names.length !== expected) failures.push(`${path} tool count: expected ${expected}, got ${names.length}`);
     const call = await rpc('tools/call', { name: 'health', arguments: {} });
     if (call.isError || call.structuredContent?.data?.status !== 'ok') failures.push(`${path} health`);
     const invalid = await rpc('tools/call', { name: 'choice_css', arguments: {} });
