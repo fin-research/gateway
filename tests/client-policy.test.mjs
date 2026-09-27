@@ -29,3 +29,11 @@ test('retired financing Workflow status URL remains unregistered',()=>{
   assert.equal(matchDashboardRoute('/financing/data/import/debt-v1-old'),null);
   assert.equal(clientRequestPermission(new URL('https://eastmoney.hasbai.xyz/financing/data/import/debt-v1-old'),'GET'),undefined);
 });
+
+test('financing model business metrics use the same read permission as the published report', () => {
+  const url = new URL('https://eastmoney.hasbai.xyz/api/financing-model/business-metrics?run=00000000-0000-4000-8000-000000000001');
+  const routeId = matchDashboardRoute(url.pathname);
+  assert.equal(routeId, '/api/financing-model/business-metrics');
+  assert.deepEqual(requestPolicy(new Request(url), routeId), { permission: 'model.financing:read' });
+  assert.equal(clientRequestPermission(url, 'GET'), 'model.financing:read');
+});
