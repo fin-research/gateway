@@ -12,13 +12,14 @@ Data 单资源 MCP 保留在 `https://eastmoney.hasbai.xyz/data/mcp`，作为门
 | Data 上游 | `eastmoney.hasbai.xyz/data/mcp`；server `data` | Auth0 逐用户 OAuth，`on_behalf=true`；Gateway 验证当前账号状态 |
 | Dashboard 上游 | `eastmoney.hasbai.xyz/api/mcp`；server `dashboard` | Auth0 逐用户 OAuth，`on_behalf=true`；业务查询、修改与 AI 生成按当前用户路由权限执行 |
 | 研究库上游 | `research.hasbai.xyz/mcp`；server `research` | AI Search research；不接入 credit 私密材料库 |
+| 授信公开材料上游 | `eastmoney-credit-search.hasbai.xyz/mcp`；server `credit` | AI Search credit 的原生 `credit_search`；`on_behalf=false`，当前索引仅含 `credit/public/**` |
 
 独立 Auth0 客户端 `eastmoney MCP portal`（`M1a5PF3UJaFIZv1k4HO4IV06Z5fXQBHV`）用于门户 IdP
 和 Data 上游授权。Auth0 post-login Action 对其应用本站相同的邮箱验证和 18.cn 限制。
 Gateway 仅在 `/data/mcp` 和 Dashboard 业务 MCP `/api/mcp` 接受此客户端的 API JWT，不扩大到网站普通 REST、CAMEL 或管理接口。
 既有网页客户端和 Quant 机器权限保持原范围；旧站点 Access 应用不恢复。
 
-门户配置独立 IdP `Eastmoney MCP Auth0`。Data、research 各有 `mcp` 类型 Access 应用，
+门户配置独立 IdP `Eastmoney MCP Auth0`。Data、Dashboard、research、credit 各有 `mcp` 类型 Access 应用，
 通过 `via_mcp_server_portal` destination 约束门户内的工具访问，不在 Data 公网路径外再加 Access。
 门户使用 `mcp_portal` 应用及 managed OAuth；动态客户端注册支持 localhost/loopback 回调，
 Access token 15 分钟、grant session 14 天。ChatGPT 允许官方固定回调
@@ -32,17 +33,23 @@ Data 上游的 manual OAuth 配置通过 authorization endpoint 的 audience 参
 
 Code Mode 当前关闭。工具定义和执行由 Cloudflare 转发；研究查询由调用方显式提供
 `published_at` 的 Unix 毫秒硬过滤和 `max_num_results=50`，遵循共享 AI 规范。
+原生 `credit_search` 直接返回 AI Search 已索引片段，不经过 Dashboard `credit_public_search` 的
+目录二次筛选、12 条结果上限和跨年度 ROE 核验；AI Search 的 R2 数据源必须持续限定为 `credit/public/**`。
+门户 Access 应用只约束门户内的 Credit 工具，不代替原生自定义域名的独立访问保护。
 
 ## 配置所有权
 
 - `scripts/configure-mcp-portal.mjs upstreams` 创建独立 IdP 与 Data manual OAuth 上游。
 - `scripts/configure-mcp-portal.mjs applications` 建立门户及上游 Access 策略、映射和 DNS。
 - `scripts/configure-mcp-portal.mjs client-redirects` 为已有门户补齐 ChatGPT DCR 回调白名单，保留完整应用配置、原白名单和登录策略。
+- `scripts/configure-mcp-portal.mjs credit-plan/credit` 只读盘点或幂等登记原生授信搜索、18.cn Access 应用与 `on_behalf=false` 映射，保留其他上游设置。
 - DNS 为 proxied CNAME `mcp.hasbai.xyz` → `gateway.agents.cloudflare.com`。
 - Auth0 配置经显式资源 Deploy CLI export/plan/apply；数据库连接仅追加门户客户端，保留已有客户端。
 - Auth0 Action 发布只 patch code，保留 Secret、依赖和绑定；MCP client ID 与 Wrangler 配置同步。
 
-Cloudflare 凭据按[项目组规则](../../eastmoney/docs/CLOUDFLARE.md)使用根目录 `.env` 的 `CLOUDFLARE_AGENT_TOKEN`。需要 API Token 的脚本通过项目组 `scripts/cloudflare_env.py` 运行，子进程接收同值的 `CLOUDFLARE_API_TOKEN`。
+Cloudflare 凭据按[项目组规则](../../eastmoney/docs/CLOUDFLARE.md)使用根目录未跟踪 `.env` 的
+`CLOUDFLARE_AGENT_TOKEN`。需要 API Token 的脚本通过[项目组包装脚本](../../eastmoney/scripts/cloudflare_env.py)
+运行，子进程接收同值的 `CLOUDFLARE_API_TOKEN`；不输出 Token。
 
 ## 验证
 
@@ -51,7 +58,8 @@ Cloudflare 凭据按[项目组规则](../../eastmoney/docs/CLOUDFLARE.md)使用�
 没有执行的交互层、浏览器或生产 CPU 检查不能由配置成功替代。
 
 ChatGPT 创建连接器报 `invalid_client_metadata: redirect_uri is not allowed by the account configuration`
-表示 Cloudflare managed OAuth 的 DCR 回调白名单不包含 ChatGPT。使用具备 `Access: Apps and Policies Write` 权限的 Token 运行 `client-redirects`，随后执行
+表示 Cloudflare managed OAuth 的 DCR 回调白名单不包含 ChatGPT。使用具备
+`Access: Apps and Policies Write` 权限的项目凭据运行 `client-redirects`，随后执行
 `node --use-env-proxy scripts/verify-mcp-registration.mjs` 验证官方两类回调注册成功，
 陌生域名、ChatGPT 非回调路径和相似前缀被拒绝。此操作更新门户 Access 应用的
 `oauth_configuration.dynamic_client_registration.allowed_uris`，不修改 Auth0 上游回调。
@@ -96,8 +104,10 @@ HTTP 注册检查不等同于 ChatGPT 界面内完整连接验收。
 NO_PROXY=mcp.hasbai.xyz python3 /Users/yueshi/src/eastmoney/eastmoney/scripts/cloudflare_env.py -- node --use-env-proxy scripts/verify-managed-mcp.mjs --reauthorize-data --check-catalog
 ```
 
-`--check-catalog` 使用 Token 的 `MCP Portals Read` 或 `Write` 权限，只读核对后台 Ready、
-成功同步时间及目录与当前用户工具是否一致；平时可单独使用该选项，省略 `--reauthorize-data`。
+通过[项目组包装脚本](../../eastmoney/scripts/cloudflare_env.py)执行上述 Node 命令，并对子进程设置 `NO_PROXY`。
+`--check-catalog` 需要 `MCP Portals Read` 或 `Write` 权限：核对后台 Ready、成功同步时间及实时工具目录。
+Cloudflare 的 manual OAuth 能力快照只在首位用户授权时捕获，后续同步不会刷新；Data 和 Dashboard
+后台快照与当前用户目录的差异会明确报告，但不作为用户调用失败。原生 Credit 的后台目录则须与实时目录一致。
 密码、Cookie、OAuth code 和 Token 仅在进程内存中处理。不要退出其他用户、关闭 Require user auth，
 或把用户 JWT 写成共享管理员凭据来消除 Waiting。
 
@@ -107,6 +117,28 @@ NO_PROXY=mcp.hasbai.xyz python3 /Users/yueshi/src/eastmoney/eastmoney/scripts/cl
 
 Dashboard 使用 SvelteKit + Cloudflare Agents MCP SDK v2，接口与工具目录由 [Dashboard MCP](../../dashboard/docs/MCP.md) 维护。Gateway `src/mcp-bridge.ts` 通过既有 IDENTITY 私有 binding 接收 `/mcp/policies` 和 `/mcp/dispatch`；每次按当前角色缓存和真实 route/action policy 校验，再经 `GatewayDashboard` 执行原业务 handler。没有新服务账户、JWT 转发或公开桥接入口。匿名/Quant 拒绝；专用 Portal JWT 的范围仅新增 `/api/mcp`。
 
-通过项目组 `scripts/cloudflare_env.py` 运行 `node --use-env-proxy scripts/configure-mcp-portal.mjs dashboard` 可幂等添加上游、其 18.cn/专用 IdP Access 应用和 `on_behalf=true` 映射；保留现有 Data/研究库和工具策略。Gateway 授权桥接先发布，再发布 Dashboard，最后配置门户。
+通过[项目组包装脚本](../../eastmoney/scripts/cloudflare_env.py)运行 `node --use-env-proxy scripts/configure-mcp-portal.mjs dashboard` 可幂等添加上游、其 18.cn/专用 IdP Access 应用和 `on_behalf=true` 映射；保留现有 Data/研究库和工具策略。Gateway 授权桥接先发布，再发布 Dashboard，最后配置门户。
 
-程序化验收：`AUTH_TEST_ENV_FILE` 指向项目组未跟踪 `.env`，按上方命令通过 `cloudflare_env.py` 运行 `scripts/verify-managed-mcp.mjs --dashboard --check-catalog`。检查 managed OAuth、三个上游、Dashboard 业务读取、无效写入拒绝、后台 Ready 和工具目录一致。这个只读/无效输入验收不等于真实写入或每个 AI 工具逐项执行。
+程序化验收：`AUTH_TEST_ENV_FILE` 指向项目组未跟踪 `.env`，运行 `NO_PROXY=mcp.hasbai.xyz node --use-env-proxy scripts/verify-managed-mcp.mjs --dashboard --check-catalog`。检查 managed OAuth、三个上游、Dashboard 业务读取、无效写入拒绝和后台 Ready。这个只读/无效输入验收不等于真实写入或每个 AI 工具逐项执行。
+
+## Credit AI Search 原生上游
+
+2026-09-27 接入独立 `credit` MCP server，门户工具名为 `credit_search`。配置前盘点 `credit` AI Search
+的 13 个索引 Item、512 个分块均来自 R2 `eastmoney/credit/public/**`，其他前缀为零；索引范围变化时须重查。
+上游使用原生搜索而非 Dashboard 包装工具，因此返回的是检索片段，不代表已核实主体、报告期、口径或页码。
+
+`credit-plan` 只读核对现有 server、Access 应用和门户映射；`credit` 幂等新增缺失配置，并回读确认
+Data、Dashboard、research 映射不变。门户内 Credit Access 应用允许通过专用 IdP 登录的 18.cn 账号。
+当前原生自定义域名没有独立 Access 应用；此前未认证命令行请求收到 Cloudflare 1010 浏览器签名拦截，
+这不是身份认证证明。直接访问边界须按公开 PDF 范围维护，不得把私密授信材料加入该实例。
+
+在 Gateway 仓库使用程序化登录验收：
+
+```sh
+NO_PROXY=mcp.hasbai.xyz python3 ../eastmoney/scripts/cloudflare_env.py -- node --use-env-proxy scripts/verify-managed-mcp.mjs --dashboard --credit --check-catalog
+```
+
+该命令确认四个上游连接、
+`credit_search` 工具发现和只读检索、Credit 后台 Ready 且目录与用户目录一致；检索片段正文不写日志。
+Data/Dashboard manual OAuth 的后台能力快照可滞后于用户目录；例如 Data 后台仍为 2026-09-09 的
+23 项，当前用户可见 25 项，新增的是 `data_trading_days`、`data_chinamoney_shibor`。
