@@ -47,9 +47,9 @@ Code Mode 当前关闭。工具定义和执行由 Cloudflare 转发；研究查�
 - Auth0 配置经显式资源 Deploy CLI export/plan/apply；数据库连接仅追加门户客户端，保留已有客户端。
 - Auth0 Action 发布只 patch code，保留 Secret、依赖和绑定；MCP client ID 与 Wrangler 配置同步。
 
-Cloudflare 凭据遵循项目组 [凭据规范](../../eastmoney/docs/CLOUDFLARE.md)：仅从项目组根目录未跟踪
-`.env` 读取 `CLOUDFLARE_AGENT_TOKEN`，通过[项目组包装脚本](../../eastmoney/scripts/cloudflare_env.py)向子进程传递，不输出 Token。
-`mcp-portal-preflight.mjs` 从子进程环境读取凭据。
+Cloudflare 凭据按[项目组规则](../../eastmoney/docs/CLOUDFLARE.md)使用根目录未跟踪 `.env` 的
+`CLOUDFLARE_AGENT_TOKEN`。需要 API Token 的脚本通过[项目组包装脚本](../../eastmoney/scripts/cloudflare_env.py)
+运行，子进程接收同值的 `CLOUDFLARE_API_TOKEN`；不输出 Token。
 
 ## 验证
 
@@ -72,8 +72,7 @@ HTTP 注册检查不等同于 ChatGPT 界面内完整连接验收。
 白名单配置：[Cloudflare Managed OAuth](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/#managed-oauth-settings)。
 
 官方依据：[MCP Portals](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/)、
-[Managed OAuth](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/)、
-[账户 Token 签发](https://developers.cloudflare.com/fundamentals/api/how-to/create-via-api/)。
+[Managed OAuth](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/)。
 
 ## 2026-09-09 实际验收
 
@@ -85,7 +84,7 @@ HTTP 注册检查不等同于 ChatGPT 界面内完整连接验收。
 - 本机代理曾对新域名产生 TLS 连接失败；直接连接已验证正常。必要时仅对子进程设置 `NO_PROXY=mcp.hasbai.xyz`，不改门户配置绕过认证。
 - Data 69 项、Gateway 44 项检查和真实后端处理器 32 项联调通过。自建聚合代码及依赖已移除，旧站点 `/mcp` 返回 410 和新地址。
 - Cloudflare 先发送 `server/discover` / `2026-07-28`；当前 Hono MCP 返回 404 协商旧协议。Data 现保留该协议响应，不再误转换为 503，门户可回退并正常连接。
-- 短期账户 Token 可管理门户、Access、DNS 和 Gateway 发布。Data 手动发布曾因 VPC 权限返回 10196；修复经 Git 自动部署上线，最终以真实工具调用验收。
+- 当次凭据可管理门户、Access、DNS 和 Gateway 发布。Data 手动发布曾因 VPC 权限返回 10196；修复经 Git 自动部署上线，最终以真实工具调用验收。
 - 生产 Data MCP 已观测到冷请求 CPU 超过 Free 10ms 的样本，不能标记为 Free CPU 安全；本地基准不能替代这一结论。
 
 ### 首次连接状态恢复
@@ -102,7 +101,7 @@ HTTP 注册检查不等同于 ChatGPT 界面内完整连接验收。
 恢复命令（仅重建测试账号的 Data 授权）：
 
 ```sh
-NO_PROXY=mcp.hasbai.xyz node --use-env-proxy scripts/verify-managed-mcp.mjs --reauthorize-data --check-catalog
+NO_PROXY=mcp.hasbai.xyz python3 /Users/yueshi/src/eastmoney/eastmoney/scripts/cloudflare_env.py -- node --use-env-proxy scripts/verify-managed-mcp.mjs --reauthorize-data --check-catalog
 ```
 
 通过[项目组包装脚本](../../eastmoney/scripts/cloudflare_env.py)执行上述 Node 命令，并对子进程设置 `NO_PROXY`。
@@ -118,7 +117,7 @@ Cloudflare 的 manual OAuth 能力快照只在首位用户授权时捕获，后�
 
 Dashboard 使用 SvelteKit + Cloudflare Agents MCP SDK v2，接口与工具目录由 [Dashboard MCP](../../dashboard/docs/MCP.md) 维护。Gateway `src/mcp-bridge.ts` 通过既有 IDENTITY 私有 binding 接收 `/mcp/policies` 和 `/mcp/dispatch`；每次按当前角色缓存和真实 route/action policy 校验，再经 `GatewayDashboard` 执行原业务 handler。没有新服务账户、JWT 转发或公开桥接入口。匿名/Quant 拒绝；专用 Portal JWT 的范围仅新增 `/api/mcp`。
 
-通过项目组凭据运行 `node --use-env-proxy scripts/configure-mcp-portal.mjs dashboard` 可幂等添加上游、其 18.cn/专用 IdP Access 应用和 `on_behalf=true` 映射；保留现有 Data/研究库和工具策略。Gateway 授权桥接先发布，再发布 Dashboard，最后配置门户。
+通过[项目组包装脚本](../../eastmoney/scripts/cloudflare_env.py)运行 `node --use-env-proxy scripts/configure-mcp-portal.mjs dashboard` 可幂等添加上游、其 18.cn/专用 IdP Access 应用和 `on_behalf=true` 映射；保留现有 Data/研究库和工具策略。Gateway 授权桥接先发布，再发布 Dashboard，最后配置门户。
 
 程序化验收：`AUTH_TEST_ENV_FILE` 指向项目组未跟踪 `.env`，运行 `NO_PROXY=mcp.hasbai.xyz node --use-env-proxy scripts/verify-managed-mcp.mjs --dashboard --check-catalog`。检查 managed OAuth、三个上游、Dashboard 业务读取、无效写入拒绝和后台 Ready。这个只读/无效输入验收不等于真实写入或每个 AI 工具逐项执行。
 
