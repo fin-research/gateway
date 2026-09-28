@@ -13,7 +13,7 @@ const operation = z.object({ path: z.string().max(8192), method: z.enum(['GET', 
 export async function mcpBridge(request: Request, env: Env, context: GatewayContext): Promise<Response> {
   const user = context.user;
   if (!user?.authorization || user.expiresAt <= Date.now() / 1000) throw new AccessError(401, '请重新登录');
-  const { permissions } = await permissionCache(env).permissions(user.authorization.roles.map(role => role.id));
+  const { permissions } = await permissionCache(env).permissions(user.authorization.roles);
   const current = { ...context, user: { ...user, authorization: { ...user.authorization, permissions } } };
   function target(path: string, method: string): Request {
     if (!path.startsWith('/') || path.startsWith('//') || path.includes('#')) throw new AccessError(403, 'MCP 目标无效');

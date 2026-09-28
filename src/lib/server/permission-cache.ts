@@ -43,9 +43,14 @@ export class PermissionCacheStore {
     // Never authorize with expired, malformed, or partially fetched permissions.
     return this.refresh();
   }
-  async permissions(roleIds: string[]) {
+  async permissions(roles: Array<string | { id: string; name: string }>) {
     const snapshot = await this.snapshot();
-    const permissions = [...new Set(roleIds.flatMap(id => snapshot.configurations[id]?.permissions ?? []).filter(isPermissionCode))].sort();
+    const roleIds = roles.map(role => typeof role === 'string' ? role : role.id);
+    const creditMaintainer = roles.some(role => typeof role !== 'string' &&
+      (role.name === 'credit' || role.name === 'admin') &&
+      snapshot.roles.some(current => current.id === role.id && current.name === role.name));
+    const permissions = [...new Set(roleIds.flatMap(id => snapshot.configurations[id]?.permissions ?? [])
+      .filter(isPermissionCode).filter(code => code !== 'credit.institution:update' || creditMaintainer))].sort();
     return { permissions, updatedAt: snapshot.updatedAt };
   }
 }

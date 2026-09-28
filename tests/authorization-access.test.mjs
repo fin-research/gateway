@@ -66,12 +66,14 @@ test('anonymous and test@18.cn cover all registered routes and actions through c
       if (scope === 'public') assert.equal((await anonymous).user, null, `${method} ${path}`);
       else await assert.rejects(anonymous, { status: 401 }, `anonymous ${method} ${path}`);
       assert.equal(managementCalls, before, `anonymous request consulted Auth0: ${method} ${path}`);
-      if(scope==='admin'){await assert.rejects(authorizeRequest(requestFor(path,method,token),env,id,auth0),{status:403});continue;}
+      if(scope==='admin' || scope==='credit.institution:update'){
+        await assert.rejects(authorizeRequest(requestFor(path,method,token),env,id,auth0),{status:403});continue;
+      }
       const signed = await authorizeRequest(requestFor(path, method, token), env, id, auth0);
       if (scope !== 'public') assert.equal(signed.user.email, 'test@18.cn', `${method} ${path}`);
       if (!['public', 'login'].includes(scope)) {
         assert.ok(signed.permissions.includes(scope), `missing scope for ${method} ${path}`);
-        assert.deepEqual(signed.permissions, [...PERMISSION_CODES].sort());
+        assert.deepEqual(signed.permissions, PERMISSION_CODES.filter(code=>code!=='credit.institution:update').sort());
         assert.equal(signed.user.auth0Id, 'auth0|unit-test-account');
       }
     }

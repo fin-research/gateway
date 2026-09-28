@@ -56,7 +56,10 @@ if (mode === 'plan') {
   for (const role of roles) {
     const existing = list(`roles/${role.id}/permissions`);
     const granted = new Set(existing.filter(p => p.resource_server_identifier === audience).map(p => p.permission_name));
-    const missing = PERMISSION_CODES.filter(code => !granted.has(code));
+    const desired = role.name === 'credit'
+      ? ['credit.institution:read', 'credit.institution:update']
+      : PERMISSION_CODES.filter(code => code !== 'credit.institution:update' || role.name === 'admin');
+    const missing = desired.filter(code => !granted.has(code));
     if (missing.length && mode === 'apply') management('post', `roles/${role.id}/permissions`, { permissions: missing.map(permission_name => ({ permission_name, resource_server_identifier: audience })) });
     else if (missing.length) throw new Error(`Incomplete role ${role.name}`);
   }
