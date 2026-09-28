@@ -22,6 +22,19 @@ test('Cache API stores JSON, reuses it for an hour, refreshes on expiry and neve
   assert.deepEqual((await store.permissions(['rol_Unknown'])).permissions,[]);
 });
 
+test('credit maintenance requires a current credit or site admin role even when baseline grants the scope',async()=>{
+  const state=memory();
+  const roles=[{id:'rol_Baseline',name:'authenticated',description:''},{id:'rol_Credit',name:'credit',description:''},{id:'rol_Admin',name:'admin',description:''}];
+  const grants=['credit.institution:read','credit.institution:update'];
+  const store=new PermissionCacheStore(state.cache,'https://site.test/credit',async()=>({version:1,updatedAt:Date.now(),roles,
+    configurations:Object.fromEntries(roles.map(role=>[role.id,{permissions:grants}]))}));
+  assert.deepEqual((await store.permissions([{id:'rol_Baseline',name:'authenticated'}])).permissions,['credit.institution:read']);
+  assert.deepEqual((await store.permissions([{id:'rol_Credit',name:'credit'}])).permissions,grants);
+  assert.deepEqual((await store.permissions([{id:'rol_Admin',name:'admin'}])).permissions,grants);
+  assert.deepEqual((await store.permissions([{id:'rol_Credit',name:'authenticated'}])).permissions,['credit.institution:read']);
+  assert.deepEqual((await store.permissions([{id:'rol_Unknown',name:'credit'}])).permissions,[]);
+});
+
 test('users read their cached permissions; only authorized same-origin users can refresh shared cache',async t=>{
   const f=await fixture(t);const token=await f.signed();
   assert.equal((await gatewayRequest(f.request('/auth/permissions'),f.env)).status,401);

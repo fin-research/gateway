@@ -83,7 +83,8 @@ Auth0 Management API 的账号、角色读取及管理 token 获取遇到 429 �
 
 - `scripts/prepare-rbac.mjs plan` 从受限 Deploy CLI 导出生成 Gateway API 权限目录、统一 Gateway management client grant 和增量角色/成员计划。`auth0:plan/apply --include=resourceServers,clientGrants` 只更新显式资源，禁止删除。当前 Deploy CLI 的 roles export 仅包含 tenant roles，组织角色及成员通过脚本 `apply` 增量补齐，再 `verify` 回读；已有其他 audience 权限保留。
 - 本站业务权限注册到 Gateway audience；API 启用 RBAC，但 `token_dialect=access_token`，不启用 Add Permissions in the Access Token。用户 JWT 只声明身份与角色，机器 Choice scope 保持不变。
-- 内测给所有本站组织成员配置 `authenticated`，给本站全部角色授予全部已登记权限。新用户通过登录 Action 自动获得基础角色。结束内测时在 Auth0 调整角色权限，无需改变鉴权代码。
+- 内测给所有本站组织成员配置 `authenticated`，但授信维护权限仅对当前 Auth0 目录确认的 `credit` 或全站 `admin` 角色生效。新用户通过登录 Action 自动获得基础角色；`credit` 角色须由组织管理员明确分配。其它权限仍按现有角色授权。
+- `node --use-env-proxy scripts/provision-credit-role.mjs plan/apply/verify` 仅建立本站组织 `credit` 角色、授予授信读写并移除其它非管理员角色的授信更新授权；不自动分配成员。运行前后核对输出，角色成员通过 Auth0 组织成员管理。
 - Gateway 将本站角色目录与授权序列化为一个 JSON Response，保存在命名 Cloudflare Cache API 中。TTL 为 3600 秒；请求命中时不查询 Auth0，缺失/过期时完整读取并替换；读取失败返回 503，不使用过期或半份授权。
 - Cache API 按 Cloudflare 节点存储，无后台定时器。所谓一小时同步为按需过期更新；手动刷新只影响当前节点，其他节点到期后各自更新。
 - `GET /auth/permissions`：仅登录，返回当前角色合并后的 `permissions` 与 `updatedAt`，读取缓存，不强制同步 Auth0；无权限用户也能查询自己，机器身份拒绝。

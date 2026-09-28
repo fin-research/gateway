@@ -74,7 +74,7 @@ export async function authorizeRequest(request: Request, env: Env, routeId: stri
   const cache = permissionCache(env);
   const snapshot = await cache.snapshot();
   const isAdmin = profile.roles.some(role => role.name === 'admin' && snapshot.roles.some(current => current.id === role.id && current.name === 'admin'));
-  const permissions = isAdmin ? [...PERMISSION_CODES] : (await cache.permissions(profile.roles.map(role => role.id))).permissions;
+  const permissions = isAdmin ? [...PERMISSION_CODES] : (await cache.permissions(profile.roles)).permissions;
   if (policy.admin && !isAdmin) throw new AccessError(403, '仅管理员可执行该操作');
   user.authorization = { ...profile, permissions, mode };
   if (policy.permission && !hasPermission(permissions, policy.permission)) throw new AccessError(403, '当前角色无权执行该操作');
