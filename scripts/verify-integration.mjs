@@ -16,6 +16,19 @@ const { Server } = await import(pathToFileURL(join(dashboard, '.svelte-kit/outpu
 const { manifest } = await import(pathToFileURL(join(dashboard, '.svelte-kit/output/server/manifest.js')).href);
 const cleanup = [];
 const f = await fixture({ after(fn) { cleanup.push(fn); } });
+let personnelPatch;
+f.intercept(async (url, init) => {
+  if (url.pathname === '/api/v2/organizations/org_Eastmoney/members') return Response.json([{ user_id: 'auth0|member' }]);
+  if (url.pathname === '/api/v2/users/auth0%7Cmember') {
+    if (init.method === 'PATCH') {
+      personnelPatch = JSON.parse(init.body);
+      return Response.json({ user_id: 'auth0|member' });
+    }
+    return Response.json({ user_id: 'auth0|member', email: 'member@18.cn', name: '旧姓名',
+      user_metadata: { department: '旧部门' }, email_verified: true, identities: [{ connection: 'eastmoney-email' }] });
+  }
+  return null;
+});
 const require = createRequire(import.meta.resolve('wrangler'));
 const { build } = require('esbuild');
 const directory = await mkdtemp(join(tmpdir(), 'eastmoney-gateway-integration-'));
@@ -24,9 +37,10 @@ try {
   await build({ entryPoints: [join(data, 'src/public-access.ts')], bundle: true, outfile: join(directory, 'data.mjs'), format: 'esm', platform: 'node', target: 'es2022', logLevel: 'silent' });
   const { handleGatewayRequest, handlePublicRequest } = await import(pathToFileURL(join(directory, 'data.mjs')).href);
   const storage = new Map();
+  const identityPaths = [];
   const appEnv = {
     EASTMONEY: { async list() { return { objects: [], truncated: false }; }, async head(key) { return storage.has(key) ? { key } : null; }, async put(key, value) { storage.set(key, value); return { key }; } },
-    IDENTITY: { fetch: request => identityService(request, f.env) },
+    IDENTITY: { fetch(request) { const url = new URL(request.url); identityPaths.push(url.pathname + url.search); return identityService(request, f.env); } },
   };
   const server = new Server(manifest); await server.init({ env: appEnv });
   f.env.DASHBOARD = { fetch(request) {
@@ -36,6 +50,7 @@ try {
   } };
   f.env.DATA = { fetch: request => handleGatewayRequest(request, {}) };
   const token = await f.signed();
+  const adminToken = await f.signed({ user: { ...f.userClaims, roles: [{ id: 'rol_TestAdmin', name: 'admin' }] } });
   const respond = (path, authenticated = true, init = {}) => gatewayRequest(f.request(path, {
     ...init, headers: { ...(authenticated ? { Cookie: SESSION_COOKIE + '=' + token } : {}), ...init.headers },
   }), f.env);
@@ -82,5 +97,27 @@ try {
   assert.equal((await respond('/management/me/__data.json')).status, 200); checks++;
   f.updateProfile({ blocked: false, email: 'changed@18.cn' });
   assert.equal((await (await respond('/management/me/__data.json')).json()).type, 'data'); checks++;
+  const adminHeaders = { Cookie: SESSION_COOKIE + '=' + adminToken };
+  let beforeDirectory = identityPaths.length;
+  const peoplePage = await respond('/management/people', true, { headers: { ...adminHeaders, Accept: 'text/html' } });
+  assert.equal(peoplePage.status, 200);
+  assert.match(await peoplePage.text(), /人员资料/);
+  assert.deepEqual(identityPaths.slice(beforeDirectory), ['/directory/people?view=profiles']); checks++;
+  beforeDirectory = identityPaths.length;
+  const rolesPage = await respond('/management/people?tab=roles', true, { headers: { ...adminHeaders, Accept: 'text/html' } });
+  assert.equal(rolesPage.status, 200);
+  assert.match(await rolesPage.text(), /刷新授权缓存/);
+  assert.deepEqual(identityPaths.slice(beforeDirectory), ['/roles/configurations']); checks++;
+  const change = { id: 'auth0|member', name: '新姓名', department: '新部门' };
+  const personResponse = await respond('/api/management/people', true, { method: 'POST',
+    headers: { ...adminHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify(change) });
+  assert.equal(personResponse.status, 200);
+  assert.deepEqual(await personResponse.json(), { ...change, email: 'member@18.cn' });
+  assert.deepEqual(personnelPatch, { name: '新姓名', user_metadata: { department: '新部门' } }); checks++;
+  personnelPatch = undefined;
+  const foreignResponse = await respond('/api/management/people', true, { method: 'POST',
+    headers: { ...adminHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...change, id: 'auth0|foreign' }) });
+  assert.equal(foreignResponse.status, 403);
+  assert.equal(personnelPatch, undefined); checks++;
   console.log(JSON.stringify({ integration: true, checks, gateway: 'Hono', dashboard: 'built SvelteKit', data: 'bundled real handler', externalServices: 'mocked', browserUsed: false }));
 } finally { for (const fn of cleanup) fn(); await rm(directory, { recursive: true, force: true }); }
