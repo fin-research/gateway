@@ -33,6 +33,8 @@ Worker Secret：`AUTH0_CLIENT_SECRET`、`AUTH0_MANAGEMENT_CLIENT_SECRET`、`SESS
 
 生产公开 origin、Auth0 issuer/API audience、用户 client ID 和机器 client ID allowlist 均在 Wrangler vars。机器 scope 限 `data.choice:read`；Quant 凭据只在其未跟踪 `.env` 中。JWT 保存登录时的角色 ID/名称与资料，不含应用有效权限快照；每个受保护请求按 JWT 角色读取缓存授权并检查路由权限，只有 `enforce` 模式可用。角色成员变更在重新登录或个人资料页“刷新登录角色”取得新 token 后生效。
 
+公开首页保留匿名访问。若请求带有效本站会话，Gateway 同请求解析当前角色授权并把展示快照交给 Dashboard SSR，使入口卡片在首屏按权限呈现；身份或权限读取失败时以匿名首页继续，不向页面传递部分授权。登录后的首页响应为 private/no-store。
+
 ## 浏览器会话 Cookie
 
 `__Host-eastmoney_session` 直接保存 Auth0 签发的 RS256 Access JWT（`header.payload.signature`），不再套 JWE。Gateway 使用 Auth0 JWKS 验签并校验 issuer、API audience、组织、client 与时效；不把可解码的 claims 当作已认证身份。Cookie 保留 Secure、HttpOnly、SameSite=Lax、Path=/，有效期不晚于 JWT exp 且不超过签发后 24 小时；服务端也按已验签 iat 检查 24 小时上限。API Bearer token 沿用其自身 JWT 时效。
