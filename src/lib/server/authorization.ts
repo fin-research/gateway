@@ -57,28 +57,37 @@ export async function authorizeRequest(request: Request, env: Env, routeId: stri
     if (error instanceof AccessError && error.code === 'ROUTE_NOT_REGISTERED') await userIdentity(request, env);
     throw error;
   }
-  if (policy.public && routeId !== '/auth/session') {
+  if (policy.public && routeId !== '/auth/session' && routeId !== '/') {
     requireSameOrigin(request);
     return { user: null, permissions: [] as string[], directory: undefined };
   }
+  if (routeId === '/') requireSameOrigin(request);
   let user: SiteIdentity | null;
   try { user = await userIdentity(request, env, policy.public); }
   catch (error) {
-    if (policy.public && error instanceof AccessError && error.status === 401) return { user: null, permissions: [] as string[], directory: undefined };
+    if (routeId === '/' || policy.public && error instanceof AccessError && error.status === 401)
+      return { user: null, permissions: [] as string[], directory: undefined };
     throw error;
   }
   if (!user) return { user: null, permissions: [] as string[], directory: undefined };
   if (!(routeId === '/api/mcp' && request.headers.has('Authorization') && !request.headers.has('Origin'))) requireSameOrigin(request);
-  const mode = authorizationMode(env.AUTHORIZATION_MODE);
-  const profile = user.authorization!;
-  const cache = permissionCache(env);
-  const snapshot = await cache.snapshot();
-  const isAdmin = profile.roles.some(role => role.name === 'admin' && snapshot.roles.some(current => current.id === role.id && current.name === 'admin'));
-  const permissions = isAdmin ? [...PERMISSION_CODES] : (await cache.permissions(profile.roles)).permissions;
-  if (policy.admin && !isAdmin) throw new AccessError(403, '仅管理员可执行该操作');
-  user.authorization = { ...profile, permissions, mode };
-  if (policy.permission && !hasPermission(permissions, policy.permission)) throw new AccessError(403, '当前角色无权执行该操作');
-  return { user, permissions, directory: undefined };
+  try {
+    const mode = authorizationMode(env.AUTHORIZATION_MODE);
+    const profile = user.authorization!;
+    const cache = permissionCache(env);
+    const snapshot = await cache.snapshot();
+    const isAdmin = profile.roles.some(role => role.name === 'admin' && snapshot.roles.some(current => current.id === role.id && current.name === 'admin'));
+    const permissions = isAdmin ? [...PERMISSION_CODES] : (await cache.permissions(profile.roles)).permissions;
+    if (policy.admin && !isAdmin) throw new AccessError(403, '仅管理员可执行该操作');
+    user.authorization = { ...profile, permissions, mode };
+    if (policy.permission && !hasPermission(permissions, policy.permission)) throw new AccessError(403, '当前角色无权执行该操作');
+    return { user, permissions, directory: undefined };
+  } catch (error) {
+    // The portal remains public when a signed session cannot be enriched with
+    // current grants; never forward a partial authorization to its SSR tree.
+    if (routeId === '/') return { user: null, permissions: [] as string[], directory: undefined };
+    throw error;
+  }
 }
 
 /** Data retains its login-only boundary; machine tokens have a separate quota scope. */
