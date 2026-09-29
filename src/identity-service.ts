@@ -30,7 +30,11 @@ export async function identityService(request: Request, env: Env): Promise<Respo
   try {
     const path = new URL(request.url).pathname;
     const directory = createDirectory(env);
-    if (request.method === 'GET' && path === '/directory/people') return Response.json(await directory.people(), { headers: privateHeaders });
+    if (request.method === 'GET' && path === '/directory/people') {
+      const view = new URL(request.url).searchParams.get('view');
+      if (view && view !== 'profiles') throw new AccessError(403, '目录视图未登记');
+      return Response.json(await directory.people(view !== 'profiles'), { headers: privateHeaders });
+    }
     if (request.method === 'GET' && path === '/directory/roles') return Response.json(await directory.roles(), { headers: privateHeaders });
     const context: GatewayContext = JSON.parse(Buffer.from(request.headers.get(CONTEXT_HEADER) ?? '', 'base64url').toString('utf8'));
     if (!context || context.version !== 1 || !context.user?.auth0Id) throw new AccessError(401, '缺少已验证身份');

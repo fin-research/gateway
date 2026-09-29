@@ -13,7 +13,11 @@ type JsonCache = Pick<Cache, 'match' | 'put'>;
 export async function readAuth0Permissions(env: Env): Promise<PermissionSnapshot> {
   const roles = await createDirectory(env).roles();
   const configurations: PermissionSnapshot['configurations'] = {};
-  for (const role of roles) configurations[role.id] = await roleConfiguration(env, role.id);
+  for (let offset = 0; offset < roles.length; offset += 4) {
+    const batch = roles.slice(offset, offset + 4);
+    const values = await Promise.all(batch.map(role => roleConfiguration(env, role.id)));
+    batch.forEach((role, index) => { configurations[role.id] = values[index]!; });
+  }
   return { version: 1, updatedAt: Date.now(), roles, configurations };
 }
 

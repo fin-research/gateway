@@ -14,7 +14,7 @@ test('private personnel update requires a registered admin role and an organizat
     if (url.pathname === '/api/v2/users/auth0%7Ctest') {
       if (init.method === 'PATCH') {
         writes.push(JSON.parse(init.body));
-        return Response.json({ ...member, name: '新姓名', user_metadata: { ...member.user_metadata, department: '新部门' } });
+        return Response.json({ user_id: member.user_id });
       }
       return Response.json(member);
     }
