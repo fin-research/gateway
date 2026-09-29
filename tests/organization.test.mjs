@@ -80,7 +80,7 @@ test('directory profile update validates fields and limits the target to organiz
     if (path === '/oauth/token') return Response.json({ access_token: 'fixture', expires_in: 100 });
     if (path === '/api/v2/organizations/org_Eastmoney/members') return Response.json([{ user_id: profile.user_id }]);
     if (path === '/api/v2/users/auth0%7Cmember' && init.method === 'PATCH')
-      return Response.json({ ...profile, name: '新姓名', user_metadata: { ...profile.user_metadata, department: '新部门' } });
+      return Response.json({ user_id: profile.user_id });
     if (path === '/api/v2/users/auth0%7Cmember') return Response.json(profile);
     throw new Error('Unexpected directory request');
   });
@@ -92,4 +92,37 @@ test('directory profile update validates fields and limits the target to organiz
     { id: 'auth0|member', name: '新姓名', department: '新部门', email: 'member@18.cn' });
   assert.deepEqual(calls.find(call => call.method === 'PATCH').body,
     { name: '新姓名', user_metadata: { department: '新部门' } });
+});
+
+test('directory loads organization members with bounded parallel requests', async () => {
+  const config = { AUTH0_ORGANIZATION_ID: 'org_Eastmoney', AUTH0_DOMAIN: 'directory-batch.auth0.com',
+    AUTH0_MANAGEMENT_CLIENT_ID: 'directory-batch', AUTH0_MANAGEMENT_CLIENT_SECRET: 'fixture' };
+  const ids = Array.from({ length: 9 }, (_, index) => `auth0|member${index}`);
+  let activeProfiles = 0, maxProfiles = 0, memberRoleRequests = 0;
+  const directory = createDirectory(config, async input => {
+    const path = new URL(input).pathname;
+    if (path === '/oauth/token') return Response.json({ access_token: 'fixture', expires_in: 100 });
+    if (path === '/api/v2/organizations/org_Eastmoney/members') return Response.json(ids.map(user_id => ({ user_id })));
+    if (path === '/api/v2/roles') return Response.json([{ id: 'rol_Site', name: 'authenticated', owner_id: 'org_Eastmoney' }]);
+    if (path.endsWith('/roles')) { memberRoleRequests++; return Response.json([{ id: 'rol_Site', name: 'authenticated' }]); }
+    if (path.startsWith('/api/v2/users/auth0%7Cmember')) {
+      activeProfiles++;
+      maxProfiles = Math.max(maxProfiles, activeProfiles);
+      await new Promise(resolve => setTimeout(resolve, 5));
+      activeProfiles--;
+      const id = decodeURIComponent(path.split('/').at(-1));
+      return Response.json({ user_id: id, email: `${id.slice('auth0|'.length)}@18.cn`, name: id,
+        email_verified: true, identities: [{ connection: 'eastmoney-email' }] });
+    }
+    throw new Error(`Unexpected directory path ${path}`);
+  });
+  const people = await directory.people();
+  assert.equal(people.length, ids.length);
+  assert.equal(maxProfiles, 4);
+  assert.ok(people.every(person => person.roles[0]?.id === 'rol_Site'));
+  assert.equal(memberRoleRequests, ids.length);
+  const profiles = await directory.people(false);
+  assert.equal(profiles.length, ids.length);
+  assert.ok(profiles.every(person => person.roles.length === 0));
+  assert.equal(memberRoleRequests, ids.length, 'profile view skips per-person role requests');
 });

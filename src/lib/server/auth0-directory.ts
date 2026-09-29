@@ -22,6 +22,7 @@ export function createDirectory(config: Config, fetchImpl: typeof fetch = fetch)
     clientSecret: config.AUTH0_MANAGEMENT_CLIENT_SECRET, fetchImpl });
   let roleRequest: Promise<Auth0Role[]> | undefined;
   let peopleRequest: Promise<DirectoryPerson[]> | undefined;
+  let profileRequest: Promise<DirectoryPerson[]> | undefined;
   if (!/^org_[A-Za-z0-9]+$/.test(config.AUTH0_ORGANIZATION_ID)) throw new AccessError(503, '组织尚未配置完成');
   const org = `organizations/${config.AUTH0_ORGANIZATION_ID}`;
   // Existing role IDs are database permission keys. Their assignments are now
@@ -46,13 +47,15 @@ export function createDirectory(config: Config, fetchImpl: typeof fetch = fetch)
     const allowed = new Set((await roles()).map(role => role.id));
     return z.array(roleSchema).parse(await manager.list(`${org}/members/${encodeURIComponent(id)}/roles`)).filter(role => allowed.has(role.id));
   }
-  async function readPeople() {
+  async function readPeople(includeRoles: boolean) {
     const people: DirectoryPerson[] = [];
-    const organizationMembers = await members();
-    for (const id of organizationMembers) {
-      const profile = await user(id);
-      people.push({ id, name: profile.name || profile.email, department: department(profile), email: profile.email,
-        active: auth0ProfileCanLogin(profile), roles: await userRoles(id) });
+    const organizationMembers = [...await members()];
+    for (let offset = 0; offset < organizationMembers.length; offset += 4) {
+      people.push(...await Promise.all(organizationMembers.slice(offset, offset + 4).map(async id => {
+        const [profile, assignedRoles] = await Promise.all([user(id), includeRoles ? userRoles(id) : Promise.resolve([])]);
+        return { id, name: profile.name || profile.email, department: department(profile), email: profile.email,
+          active: auth0ProfileCanLogin(profile), roles: assignedRoles };
+      })));
     }
     return people.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
   }
@@ -62,10 +65,9 @@ export function createDirectory(config: Config, fetchImpl: typeof fetch = fetch)
       const change = personChange.safeParse(input);
       if (!change.success) throw new ProfileError(400, '请检查姓名和部门');
       const before = await user(change.data.id);
-      const updated = userSchema.parse(await manager.request(`users/${encodeURIComponent(change.data.id)}`, 'PATCH',
-        { name: change.data.name, user_metadata: { department: change.data.department } }));
-      if (updated.user_id !== before.user_id || updated.email !== before.email) throw new AccessError(503, '账号资料响应无效');
-      return { id: updated.user_id, name: updated.name || updated.email, department: department(updated), email: updated.email };
+      await manager.request(`users/${encodeURIComponent(change.data.id)}`, 'PATCH',
+        { name: change.data.name, user_metadata: { department: change.data.department } });
+      return { id: before.user_id, name: change.data.name, department: change.data.department, email: before.email };
     },
     async current(identity: SiteIdentity, includeRoles = true) {
       if (!identity.auth0Id) throw new AccessError(503, '账号身份声明尚未配置完成');
@@ -76,8 +78,8 @@ export function createDirectory(config: Config, fetchImpl: typeof fetch = fetch)
       if (!auth0ProfileCanLogin(profile)) throw new AccessError(403, '账号已停用或邮箱尚未验证');
       return { name: profile.name || profile.email, department: department(profile), roles: includeRoles ? await userRoles(identity.auth0Id) : [], picture: profile.picture ?? '' };
     },
-    people() {
-      return peopleRequest ??= readPeople();
+    people(includeRoles = true) {
+      return includeRoles ? (peopleRequest ??= readPeople(true)) : (profileRequest ??= readPeople(false));
     },
   };
 }
