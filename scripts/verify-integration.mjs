@@ -16,14 +16,21 @@ const { Server } = await import(pathToFileURL(join(dashboard, '.svelte-kit/outpu
 const { manifest } = await import(pathToFileURL(join(dashboard, '.svelte-kit/output/server/manifest.js')).href);
 const cleanup = [];
 const f = await fixture({ after(fn) { cleanup.push(fn); } });
-let personnelPatch;
+let personnelPatch, aggregateReads = 0, individualProfileReads = 0;
 f.intercept(async (url, init) => {
   if (url.pathname === '/api/v2/organizations/org_Eastmoney/members') return Response.json([{ user_id: 'auth0|member' }]);
+  if (url.pathname === '/api/v2/users') {
+    aggregateReads++;
+    assert.equal(url.searchParams.get('q'), 'organization_id:"org_Eastmoney"');
+    return Response.json([{ user_id: 'auth0|member', email: 'member@18.cn', name: '旧姓名',
+      user_metadata: { department: '旧部门' }, email_verified: true, identities: [{ connection: 'eastmoney-email' }] }]);
+  }
   if (url.pathname === '/api/v2/users/auth0%7Cmember') {
     if (init.method === 'PATCH') {
       personnelPatch = JSON.parse(init.body);
       return Response.json({ user_id: 'auth0|member' });
     }
+    individualProfileReads++;
     return Response.json({ user_id: 'auth0|member', email: 'member@18.cn', name: '旧姓名',
       user_metadata: { department: '旧部门' }, email_verified: true, identities: [{ connection: 'eastmoney-email' }] });
   }
@@ -103,6 +110,8 @@ try {
   assert.equal(peoplePage.status, 200);
   assert.match(await peoplePage.text(), /人员资料/);
   assert.deepEqual(identityPaths.slice(beforeDirectory), ['/directory/people?view=profiles']); checks++;
+  assert.equal(aggregateReads, 1);
+  assert.equal(individualProfileReads, 0); checks++;
   beforeDirectory = identityPaths.length;
   const rolesPage = await respond('/management/people?tab=roles', true, { headers: { ...adminHeaders, Accept: 'text/html' } });
   assert.equal(rolesPage.status, 200);
