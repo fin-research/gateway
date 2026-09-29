@@ -6,7 +6,7 @@ const apply = process.argv.includes('--apply');
 const web = '16vMxoYpr5AdPRiW1PkwIiHuRWszii6m';
 const portal = 'M1a5PF3UJaFIZv1k4HO4IV06Z5fXQBHV';
 const owned = new Set([web, portal, 'LA46CcB3FQ4Uac4JyEzPSObcV4PV8CFU', 'MriIYaKO6xE8QfOAMdiQMxmKeSq53eHo',
-  'rpBS8lgdzn7LXhImz8BGiKLPSTjztcwz', '9t8TBoWunhy0MXjI8rvXm6wgVb45nwnS', 'Ja1Jra2z1ifOKOUnA9M2qu3JzUudgW4j']);
+  'rpBS8lgdzn7LXhImz8BGiKLPSTjztcwz', 'Ja1Jra2z1ifOKOUnA9M2qu3JzUudgW4j']);
 const connections = [['con_YKnh8Ydf31QO4pol', 'eastmoney-email'], ['con_kGVFIfe24V8o1nWu', 'google-oauth2'], ['con_jEHW8XUFpxA5SyYU', 'Username-Password-Authentication']];
 function clients(id) {
   let from; const result = [];

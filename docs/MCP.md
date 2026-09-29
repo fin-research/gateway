@@ -17,7 +17,7 @@ Data 单资源 MCP 保留在 `https://eastmoney.hasbai.xyz/data/mcp`，作为门
 独立 Auth0 客户端 `eastmoney MCP portal`（`M1a5PF3UJaFIZv1k4HO4IV06Z5fXQBHV`）用于门户 IdP
 和 Data 上游授权。Auth0 post-login Action 对其应用本站相同的邮箱验证和 18.cn 限制。
 Gateway 仅在 `/data/mcp` 和 Dashboard 业务 MCP `/api/mcp` 接受此客户端的 API JWT，不扩大到网站普通 REST、CAMEL 或管理接口。
-既有网页客户端和 Quant 机器权限保持原范围；旧站点 Access 应用不恢复。
+既有网页客户端权限保持原范围；Quant 机器客户端已退役，Gateway 白名单为空。旧站点 Access 应用不恢复。
 
 门户配置独立 IdP `Eastmoney MCP Auth0`。Data、Dashboard、research、credit 各有 `mcp` 类型 Access 应用，
 通过 `via_mcp_server_portal` destination 约束门户内的工具访问，不在 Data 公网路径外再加 Access。
@@ -44,7 +44,7 @@ Code Mode 当前关闭。工具定义和执行由 Cloudflare 转发；研究查�
 - `scripts/configure-mcp-portal.mjs client-redirects` 为已有门户补齐 ChatGPT DCR 回调白名单，保留完整应用配置、原白名单和登录策略。
 - `scripts/configure-mcp-portal.mjs credit-plan/credit` 只读盘点或幂等登记原生授信搜索、18.cn Access 应用与 `on_behalf=false` 映射，保留其他上游设置。
 - DNS 为 proxied CNAME `mcp.hasbai.xyz` → `gateway.agents.cloudflare.com`。
-- Auth0 配置经显式资源 Deploy CLI export/plan/apply；数据库连接仅追加门户客户端，保留已有客户端。
+- Auth0 配置按[共享 AUTH](../../eastmoney/docs/AUTH.md#auth0-本地租户管理) 使用 Auth0 skill 和 CLI；数据库连接只针对门户客户端修改，保留已有客户端。
 - Auth0 Action 发布只 patch code，保留 Secret、依赖和绑定；MCP client ID 与 Wrangler 配置同步。
 
 Cloudflare 凭据按[项目组规则](../../eastmoney/docs/CLOUDFLARE.md)使用根目录未跟踪 `.env` 的

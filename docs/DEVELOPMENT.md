@@ -32,7 +32,7 @@ git diff --check
 
 Worker Secret：`AUTH0_CLIENT_SECRET`、`AUTH0_MANAGEMENT_CLIENT_SECRET`、`SESSION_SECRET`。登录事务密钥为 32 字节随机值的 Base64URL；仅保存在受限部署文件与 Worker Secret。Gateway 不再绑定权限数据库；使用命名 Cache API `eastmoney-permissions-v1`，不需要 KV、Durable Object 或数据库 migration。
 
-生产公开 origin、Auth0 issuer/API audience、用户 client ID 和机器 client ID allowlist 均在 Wrangler vars。机器 scope 限 `data.choice:read`；Quant 凭据只在其未跟踪 `.env` 中。JWT 保存登录时的角色 ID/名称与资料，不含应用有效权限快照；每个受保护请求按 JWT 角色读取缓存授权并检查路由权限，只有 `enforce` 模式可用。角色成员变更在重新登录或个人资料页“刷新登录角色”取得新 token 后生效。
+生产公开 origin、Auth0 issuer/API audience、用户 client ID 和机器 client ID allowlist 均在 Wrangler vars。Quant 机器应用退役后 allowlist 为空；重新开放机器访问须另行审查 client、scope 和调用链。JWT 保存登录时的角色 ID/名称与资料，不含应用有效权限快照；每个受保护请求按 JWT 角色读取缓存授权并检查路由权限，只有 `enforce` 模式可用。角色成员变更在重新登录或个人资料页“刷新登录角色”取得新 token 后生效。
 
 公开首页保留匿名访问。若请求带有效本站会话，Gateway 同请求解析当前角色授权并把展示快照交给 Dashboard SSR，使入口卡片在首屏按权限呈现；身份或权限读取失败时以匿名首页继续，不向页面传递部分授权。登录后的首页响应为 private/no-store。
 
@@ -52,13 +52,13 @@ Auth0 登录 Action 将业务信息签入一个短的 `user` claim：`user.roles
 
 ## Auth0 配置
 
-按共享 AUTH 使用显式资源 `auth0:export` / `auth0:plan` / `auth0:apply`；默认禁止删除、不导出 Secret。`scripts/prepare-gateway-tenant.mjs` 从受限导出生成本次 web callback、API audience 与 Quant 机器应用配置；先审阅计划再 apply。保留现有角色、角色成员、注册 Form 和迁移账号例外。
+当前本地租户管理按[共享 AUTH](../../eastmoney/docs/AUTH.md#auth0-本地租户管理) 使用 Auth0 skill 和 `auth0` CLI：先检查现有授权，再读取目标资源、执行精确变更并回读。`scripts/prepare-gateway-tenant.mjs` 是初次迁移时从受限导出生成配置的历史脚本，不应重跑以覆盖现有角色、成员、注册 Form 或迁移账号例外。
 
 登录 Action 为 `auth0/actions/eastmoney-login.cjs`，给本站 API access token 添加 `user.email`、`user.roles` 与 `user.profile`；Auth0 原生 `sub` 即用户主键。Action 在登录时从事件取得角色名称，通过统一的 `eastmoney gateway management` 机器应用解析稳定角色 ID，并给未持有 `authenticated` 的本组织用户增量分配基础角色；同一应用还供 Gateway 身份服务和注册资料 Action 使用。六项 Management API 权限及固定 client ID 见 `auth0/gateway-management-client.yaml`；`scripts/publish-login-claims.mjs` 先 plan、再 `--apply`，受控更新代码，保留现有 Secrets、依赖与绑定并回读 deployed version。旧 token 缺少角色声明时要求重新登录。确认 Gateway 切换完成后移除本站应用的旧 Access callback/logout 白名单。
 
 ## 生产交付
 
-先验证私有后端、Gateway 路由与 Auth0 配置，再切换生产入口。只有 Gateway 持有 `eastmoney.hasbai.xyz/*`；Dashboard/Data 的默认入口保持 404。发布后以程序化 HTTP 检查公开访问、匿名拒绝、测试账号、Quant 机器范围和后端 origin 绕过，并回读 Worker 版本。当前命名 binding、路由与回退顺序以 [共享架构](../../eastmoney/docs/ARCHITECTURE.md) 和配置为准。
+先验证私有后端、Gateway 路由与 Auth0 配置，再切换生产入口。只有 Gateway 持有 `eastmoney.hasbai.xyz/*`；Dashboard/Data 的默认入口保持 404。发布后以程序化 HTTP 检查公开访问、匿名拒绝、测试账号、已退役机器客户端的拒绝和后端 origin 绕过，并回读 Worker 版本。当前命名 binding、路由与回退顺序以 [共享架构](../../eastmoney/docs/ARCHITECTURE.md) 和配置为准。
 
 若回退到旧公网入口，必须先恢复其 Access 应用保护及配套配置，再恢复 route；不得只恢复可绕过 Gateway 的 origin。使用受限的部署前快照逐项回退，不导入整租户或提交凭据。
 
@@ -80,12 +80,12 @@ Auth0 Management API 的账号、角色读取及管理 token 获取遇到 429 �
 
 ## Eastmoney 组织隔离
 
-网站与 MCP 用户登录绑定 `org_6yvoRRCkzk3eGkBS`，Gateway 校验 `org_id`；账号目录和成员角色使用本组织范围。当前套餐不支持 M2M Organizations，Quant 保留单独 Choice 白名单。应用盘点、迁移、套餐限制与回退见 [组织与应用边界](AUTH0_ORGANIZATIONS.md)。
+网站与 MCP 用户登录绑定 `org_6yvoRRCkzk3eGkBS`，Gateway 校验 `org_id`；账号目录和成员角色使用本组织范围。当前套餐不支持 M2M Organizations；Quant 旧 Choice 白名单已清空。应用盘点、迁移、套餐限制与回退见 [组织与应用边界](AUTH0_ORGANIZATIONS.md)。
 
 ## Auth0 RBAC 与授权缓存
 
-- `scripts/prepare-rbac.mjs plan` 从受限 Deploy CLI 导出生成 Gateway API 权限目录、统一 Gateway management client grant 和增量角色/成员计划。`auth0:plan/apply --include=resourceServers,clientGrants` 只更新显式资源，禁止删除。当前 Deploy CLI 的 roles export 仅包含 tenant roles，组织角色及成员通过脚本 `apply` 增量补齐，再 `verify` 回读；已有其他 audience 权限保留。
-- 本站业务权限注册到 Gateway audience；API 启用 RBAC，但 `token_dialect=access_token`，不启用 Add Permissions in the Access Token。用户 JWT 只声明身份与角色，机器 Choice scope 保持不变。
+- 历史 RBAC 迁移使用 `scripts/prepare-rbac.mjs` 和受限 Deploy CLI 导出；不要重放旧导出。后续 API scope、角色和成员调整按共享 AUTH 的 CLI 流程逐项读取、修改并回读，保留其他 audience 权限。
+- 本站业务权限注册到 Gateway audience；API 启用 RBAC，但 `token_dialect=access_token`，不启用 Add Permissions in the Access Token。用户 JWT 只声明身份与角色；旧机器 Choice scope 保留为历史 API 定义，不构成客户端授权。
 - 内测给所有本站组织成员配置 `authenticated`，但授信维护权限仅对当前 Auth0 目录确认的 `credit` 或全站 `admin` 角色生效。新用户通过登录 Action 自动获得基础角色；`credit` 角色须由组织管理员明确分配。其它权限仍按现有角色授权。
 - `node --use-env-proxy scripts/provision-credit-role.mjs plan/apply/verify` 仅建立本站组织 `credit` 角色、授予授信读写并移除其它非管理员角色的授信更新授权；不自动分配成员。运行前后核对输出，角色成员通过 Auth0 组织成员管理。
 - Gateway 将本站角色目录与授权序列化为一个 JSON Response，保存在命名 Cloudflare Cache API 中。TTL 为 3600 秒；请求命中时不查询 Auth0，缺失/过期时完整读取并替换；读取失败返回 503，不使用过期或半份授权。
@@ -96,7 +96,7 @@ Auth0 Management API 的账号、角色读取及管理 token 获取遇到 429 �
 
 ## 交易流程配置权限
 
-`GET /api/trading-workflow/config` 使用 `research.workspace:read`，`PUT` 使用 `research.workflow:update`。Gateway 仅执行路由准入与同源校验，Dashboard 校验节点树和配置版本；每日启用、完成与分支状态经 `/api/trading-workflow/day` 按用户及上海日期保存到 Dashboard D1；询价行、名单和备注留在浏览器。新增业务权限时通过 Deploy CLI 明确更新 Gateway API scope 和本站角色授权；发布后运行 `auth:verify -- --refresh-permissions` 并读取受影响接口，其他 Cloudflare 节点按现有缓存 TTL 更新。
+`GET /api/trading-workflow/config` 使用 `research.workspace:read`，`PUT` 使用 `research.workflow:update`。Gateway 仅执行路由准入与同源校验，Dashboard 校验节点树和配置版本；每日启用、完成与分支状态经 `/api/trading-workflow/day` 按用户及上海日期保存到 Dashboard D1；询价行、名单和备注留在浏览器。新增业务权限时按共享 AUTH 的 CLI 流程精确更新 Gateway API scope 和本站角色授权；发布后运行 `auth:verify -- --refresh-permissions` 并读取受影响接口，其他 Cloudflare 节点按现有缓存 TTL 更新。
 
 ## 测试分层与覆盖率
 

@@ -13,7 +13,7 @@
 - 权限验收只使用程序化 HTTP/单元测试/CLI，禁止 browser。新增用户身份仅匿名与 `test@18.cn`；凭据读取项目组未跟踪 `.env`。
 - 修改前检索已有实现，保留其他任务改动。不得删除测试或关闭检查；迁移测试随所有权移动。
 - 绑定类型使用 `pnpm typegen` 生成。交付运行 `pnpm check`、`pnpm deploy:dry`、`git diff --check`；跨仓库集成后验证公网绕过、真实登录和机器凭据。
-- Auth0 配置使用显式资源 Deploy CLI export/plan/apply。生产切换先验证 Gateway 和私有后端，再切换路由并移除本站 Access 规则；其他 Access 应用不变。
+- 本地 Auth0 租户管理使用 Auth0 skill 和 `auth0` CLI，先检查并复用本机已有授权；多会话不得反复 `auth0 login`。并行修改同一租户资源时先协调，操作后回读。生产切换先验证 Gateway 和私有后端，再切换路由并移除本站 Access 规则；其他 Access 应用不变。
 - 只提交任务文件，推送并回读远端。部署和发布后只读检查已由重构任务授权。
 
 具体命令和切换顺序见 [DEVELOPMENT](docs/DEVELOPMENT.md)。
