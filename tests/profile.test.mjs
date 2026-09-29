@@ -4,7 +4,7 @@ import { createProfileService, readProfileJson } from '../src/lib/server/profile
 
 const config = { AUTH0_DOMAIN: 'example.auth0.com', AUTH0_ORGANIZATION_ID: 'org_Eastmoney', AUTH0_CLIENT_ID: 'login-client', AUTH0_MANAGEMENT_CLIENT_ID: 'manager', AUTH0_MANAGEMENT_CLIENT_SECRET: 'test-service-secret' };
 const identity = { auth0Id: 'auth0|me', email: 'me@18.cn' };
-const user = { user_id: 'auth0|me', email: 'me@18.cn', email_verified: true, name: '原姓名', identities: [{ connection: 'eastmoney-email', access_token: 'must-not-be-returned' }] };
+const user = { user_id: 'auth0|me', email: 'me@18.cn', email_verified: true, name: '原姓名', user_metadata: { department: '原部门', preference: 'keep' }, identities: [{ connection: 'eastmoney-email', access_token: 'must-not-be-returned' }] };
 function fixture({ account = user, respond } = {}) {
   const calls = [];
   const fetcher = async (url, init) => {
@@ -30,7 +30,7 @@ function fixture({ account = user, respond } = {}) {
 
 test('profile reads the signed subject and returns only public profile and permission fields', async () => {
   const { service, calls } = fixture();
-  assert.deepEqual(await service.read(), { name: '原姓名', email: 'me@18.cn', emailVerified: true,
+  assert.deepEqual(await service.read(), { name: '原姓名', department: '原部门', email: 'me@18.cn', emailVerified: true,
     roles: [{ name: 'admin', description: '管理员' }], permissions: [] });
   assert.equal(calls.filter((call) => call.path === '/oauth/token').length, 1);
   assert.ok(calls.every((call) => !call.path.includes('users-by-email')));
@@ -44,10 +44,18 @@ test('profile refuses anonymous or unmapped identities and missing management co
 
 test('name update targets only the current identity and uses the confirmed upstream name', async () => {
   const { service, calls } = fixture();
-  assert.deepEqual(await service.update({ action: 'name', name: '  新姓名  ' }), { message: '个人资料已保存', name: '新姓名' });
+  assert.deepEqual(await service.update({ action: 'name', name: '  新姓名  ' }), { message: '个人资料已保存', name: '新姓名', department: '原部门' });
   const mutation = calls.find((call) => call.method === 'PATCH');
   assert.equal(mutation.path, '/api/v2/users/auth0%7Cme');
   assert.deepEqual(mutation.body, { name: '新姓名' });
+});
+
+test('user can update own department with name while retaining unrelated metadata', async () => {
+  const { service, calls } = fixture();
+  assert.deepEqual(await service.update({ action: 'name', name: '新姓名', department: '  新部门  ' }),
+    { message: '个人资料已保存', name: '新姓名', department: '新部门' });
+  assert.deepEqual(calls.find(call => call.method === 'PATCH').body,
+    { name: '新姓名', user_metadata: { department: '新部门' } });
 });
 
 test('profile rejects arbitrary IDs, permissions, metadata, invalid emails and unconfirmed email changes before any request', async () => {
@@ -56,6 +64,7 @@ test('profile rejects arbitrary IDs, permissions, metadata, invalid emails and u
     { action: 'name', name: '' }, { action: 'name', name: 'a'.repeat(51) },
     { action: 'name', name: 'x', user_id: 'auth0|someone' },
     { action: 'name', name: 'x', app_metadata: { role: 'admin' } },
+    { action: 'name', name: 'x', department: 'd'.repeat(101) },
     { action: 'email', email: 'me@example.com', confirmed: true },
     { action: 'email', email: 'new@18.cn', confirmed: false },
     { action: 'email', email: 'new@18.cn' },
