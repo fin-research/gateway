@@ -36,6 +36,14 @@ export async function identityService(request: Request, env: Env): Promise<Respo
     if (!context || context.version !== 1 || !context.user?.auth0Id) throw new AccessError(401, '缺少已验证身份');
     const user = context.user;
     if (path === '/mcp/dispatch' || path === '/mcp/policies') return await mcpBridge(request, env, context);
+    if (path === '/directory/people/profile' && request.method === 'POST') {
+      const snapshot = await permissionCache(env).snapshot();
+      const admin = user.authorization?.roles.some(role => role.name === 'admin'
+        && snapshot.roles.some(current => current.id === role.id && current.name === 'admin'));
+      if (!admin) throw new AccessError(403, '仅管理员可修改人员资料');
+      if (!request.headers.get('Content-Type')?.includes('application/json')) throw new ProfileError(415, '请提交 JSON 格式的人员资料');
+      return Response.json(await directory.updatePerson(await readProfileJson(request, 4096)), { headers: privateHeaders });
+    }
     if (path === '/api/profile') {
       if (!hasPermission(user.authorization?.permissions, request.method === 'POST' ? 'account.profile:update' : 'account.profile:read')) throw new AccessError(403, '当前角色无权执行该操作');
       return profileRequest(request, env, user);

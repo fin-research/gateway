@@ -67,3 +67,29 @@ test('directory reads only organization members and scoped roles, preserving leg
   assert.equal(calls.filter(p => p === '/api/v2/organizations/org_Eastmoney/members').length, 1);
   assert.ok(!calls.includes('/api/v2/users') && !calls.some(p => p.includes('auth0%7Cforeign')));
 });
+
+test('directory profile update validates fields and limits the target to organization members', async () => {
+  const calls = [];
+  const config = { AUTH0_ORGANIZATION_ID: 'org_Eastmoney', AUTH0_DOMAIN: 'directory-update.auth0.com',
+    AUTH0_MANAGEMENT_CLIENT_ID: 'directory-update', AUTH0_MANAGEMENT_CLIENT_SECRET: 'fixture' };
+  const profile = { user_id: 'auth0|member', email: 'member@18.cn', name: '旧姓名',
+    user_metadata: { department: '旧部门', color: 'blue' }, identities: [{ connection: 'eastmoney-email' }] };
+  const directory = createDirectory(config, async (input, init) => {
+    const path = new URL(input).pathname;
+    calls.push({ path, method: init.method, body: init.body ? JSON.parse(init.body) : null });
+    if (path === '/oauth/token') return Response.json({ access_token: 'fixture', expires_in: 100 });
+    if (path === '/api/v2/organizations/org_Eastmoney/members') return Response.json([{ user_id: profile.user_id }]);
+    if (path === '/api/v2/users/auth0%7Cmember' && init.method === 'PATCH')
+      return Response.json({ ...profile, name: '新姓名', user_metadata: { ...profile.user_metadata, department: '新部门' } });
+    if (path === '/api/v2/users/auth0%7Cmember') return Response.json(profile);
+    throw new Error('Unexpected directory request');
+  });
+  await assert.rejects(directory.updatePerson({ id: 'auth0|member', name: 'x', department: 'd'.repeat(101) }), { status: 400 });
+  assert.equal(calls.length, 0);
+  await assert.rejects(directory.updatePerson({ id: 'auth0|foreign', name: 'x', department: '' }), { status: 403 });
+  assert.equal(calls.some(call => call.method === 'PATCH'), false);
+  assert.deepEqual(await directory.updatePerson({ id: 'auth0|member', name: ' 新姓名 ', department: ' 新部门 ' }),
+    { id: 'auth0|member', name: '新姓名', department: '新部门', email: 'member@18.cn' });
+  assert.deepEqual(calls.find(call => call.method === 'PATCH').body,
+    { name: '新姓名', user_metadata: { department: '新部门' } });
+});

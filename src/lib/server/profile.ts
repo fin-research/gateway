@@ -14,7 +14,7 @@ export class ProfileError extends Error {
 }
 
 export const profileChange = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('name'), name: z.string().trim().min(1).max(50) }).strict(),
+  z.object({ action: z.literal('name'), name: z.string().trim().min(1).max(50), department: z.string().trim().max(100).optional() }).strict(),
   z.object({ action: z.literal('email'), email: z.email().max(254).transform((value) => value.trim().toLowerCase())
     .refine((value) => /^[^@\s]+@18\.cn$/.test(value)), confirmed: z.literal(true) }).strict(),
   z.object({ action: z.literal('password') }).strict(),
@@ -84,7 +84,8 @@ export function createProfileService(config: Config, identity: Identity | null, 
   async function currentUser() {
     const parsed = z.object({ user_id: z.string(), email: z.string(), email_verified: z.boolean().optional(),
       name: z.string().optional(), blocked: z.boolean().optional(),
-      identities: z.array(z.object({ connection: z.string() })) }).safeParse(await request(`${userPath}?fields=user_id,email,email_verified,name,blocked,identities&include_fields=true`));
+      user_metadata: z.object({ department: z.string().optional() }).passthrough().optional(),
+      identities: z.array(z.object({ connection: z.string() })) }).safeParse(await request(`${userPath}?fields=user_id,email,email_verified,name,blocked,identities,user_metadata&include_fields=true`));
     if (!parsed.success) throw new ProfileError(503, '账号信息暂时无法读取');
     const user = parsed.data;
     if (user.user_id !== userId || user.email.toLowerCase() !== email.toLowerCase()) throw new AccessError(401, '账号信息已变更，请重新登录');
@@ -108,7 +109,7 @@ export function createProfileService(config: Config, identity: Identity | null, 
       const user = await currentUser();
       const roles = identity.authorization?.roles ?? z.array(z.object({ name: z.string(), description: z.string().optional().default('') })).parse(await list('roles'));
       const permissions = identity.authorization?.permissions ?? [];
-      return { name: user.name ?? '', email: user.email, emailVerified: user.email_verified === true,
+      return { name: user.name ?? '', department: user.user_metadata?.department ?? '', email: user.email, emailVerified: user.email_verified === true,
         roles, permissions: PERMISSION_DEFINITIONS.filter(([code]) => permissions.includes(code)).map(([code, label, description]) => ({ name: code, description: `${label}：${description}`, resource: code.split('.')[0]! })) };
 
     },
@@ -128,9 +129,11 @@ export function createProfileService(config: Config, identity: Identity | null, 
         await request(userPath, 'PATCH', { email: change.email, email_verified: false, verify_email: true, connection: 'eastmoney-email', client_id: config.AUTH0_CLIENT_ID });
         return { message: '登录邮箱已更新，请验证新邮箱并重新登录', logout: true };
       }
-      const updated = z.object({ name: z.string() }).safeParse(await request(userPath, 'PATCH', { name: change.name }));
+      const updated = z.object({ name: z.string(), user_metadata: z.object({ department: z.string().optional() }).optional() }).safeParse(
+        await request(userPath, 'PATCH', { name: change.name, ...(change.department === undefined ? {} : { user_metadata: { department: change.department } }) }));
       if (!updated.success) throw new ProfileError(503, '个人资料响应无效，请重新读取确认');
-      return { message: '个人资料已保存', name: updated.data.name };
+      return { message: '个人资料已保存', name: updated.data.name,
+        department: updated.data.user_metadata?.department ?? user.user_metadata?.department ?? '' };
     },
   };
 }

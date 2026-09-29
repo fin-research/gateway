@@ -1,5 +1,6 @@
 export interface AccountProfile {
   name: string;
+  department: string;
   email: string;
   emailVerified: boolean;
   roles: { name: string; description: string }[];

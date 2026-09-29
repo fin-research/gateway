@@ -54,6 +54,7 @@ export const ROUTE_PERMISSIONS: Record<string, Methods> = {
   '/api/notifications/push': { POST: 'login', DELETE: 'login' },
   '/api/trading-workflow/day': { GET: 'research.workspace:read', PUT: 'research.workspace:read' },
   '/api/profile': { GET: 'account.profile:read', POST: 'account.profile:update' },
+  '/api/management/people': { POST: 'admin' },
   '/management/messenger': { GET: 'admin', 'POST:retry': 'admin', 'POST:sendTest': 'admin' },
   '/management': { GET: 'login' },
   '/auth/permissions': { GET: 'login' },

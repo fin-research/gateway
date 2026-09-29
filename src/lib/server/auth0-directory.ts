@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { auth0ProfileCanLogin, createAuth0ManagementClient } from './auth0-management.js';
 import { AccessError } from './access.ts';
+import { ProfileError } from './profile.ts';
 import type { SiteIdentity } from '../identity.ts';
 
 type Config = Pick<Env, 'AUTH0_DOMAIN' | 'AUTH0_ORGANIZATION_ID' | 'AUTH0_MANAGEMENT_CLIENT_ID' | 'AUTH0_MANAGEMENT_CLIENT_SECRET'>;
@@ -10,7 +11,11 @@ const userSchema = z.object({ user_id: z.string().regex(/^auth0\|\S+$/), email: 
   user_metadata: z.record(z.string(), z.unknown()).optional(), app_metadata: z.record(z.string(), z.unknown()).optional(),
   identities: z.array(z.object({ connection: z.string() })) });
 export type Auth0Role = z.infer<typeof roleSchema>;
-export type DirectoryPerson = { id: string; name: string; email: string; active: boolean; roles: Auth0Role[] };
+export type DirectoryPerson = { id: string; name: string; department: string; email: string; active: boolean; roles: Auth0Role[] };
+const personChange = z.object({ id: z.string().regex(/^auth0\|\S+$/), name: z.string().trim().min(1).max(50), department: z.string().trim().max(100) }).strict();
+function department(profile: z.infer<typeof userSchema>): string {
+  return typeof profile.user_metadata?.department === 'string' ? profile.user_metadata.department.trim().slice(0, 100) : '';
+}
 
 export function createDirectory(config: Config, fetchImpl: typeof fetch = fetch) {
   const manager = createAuth0ManagementClient({ domain: config.AUTH0_DOMAIN, clientId: config.AUTH0_MANAGEMENT_CLIENT_ID,
@@ -46,13 +51,22 @@ export function createDirectory(config: Config, fetchImpl: typeof fetch = fetch)
     const organizationMembers = await members();
     for (const id of organizationMembers) {
       const profile = await user(id);
-      people.push({ id, name: profile.name || profile.email, email: profile.email,
+      people.push({ id, name: profile.name || profile.email, department: department(profile), email: profile.email,
         active: auth0ProfileCanLogin(profile), roles: await userRoles(id) });
     }
     return people.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
   }
   return {
     roles, user, userRoles,
+    async updatePerson(input: unknown) {
+      const change = personChange.safeParse(input);
+      if (!change.success) throw new ProfileError(400, '请检查姓名和部门');
+      const before = await user(change.data.id);
+      const updated = userSchema.parse(await manager.request(`users/${encodeURIComponent(change.data.id)}`, 'PATCH',
+        { name: change.data.name, user_metadata: { department: change.data.department } }));
+      if (updated.user_id !== before.user_id || updated.email !== before.email) throw new AccessError(503, '账号资料响应无效');
+      return { id: updated.user_id, name: updated.name || updated.email, department: department(updated), email: updated.email };
+    },
     async current(identity: SiteIdentity, includeRoles = true) {
       if (!identity.auth0Id) throw new AccessError(503, '账号身份声明尚未配置完成');
       let profile;
@@ -60,7 +74,7 @@ export function createDirectory(config: Config, fetchImpl: typeof fetch = fetch)
       catch (error) { if (error && typeof error === 'object' && 'status' in error && error.status === 404) throw new AccessError(401, '账号已变更，请重新登录'); throw error; }
       if (profile.email.toLowerCase() !== identity.email.toLowerCase()) throw new AccessError(401, '账号信息已变更，请重新登录');
       if (!auth0ProfileCanLogin(profile)) throw new AccessError(403, '账号已停用或邮箱尚未验证');
-      return { name: profile.name || profile.email, department: typeof profile.user_metadata?.department === 'string' ? profile.user_metadata.department.trim().slice(0, 100) : '', roles: includeRoles ? await userRoles(identity.auth0Id) : [], picture: profile.picture ?? '' };
+      return { name: profile.name || profile.email, department: department(profile), roles: includeRoles ? await userRoles(identity.auth0Id) : [], picture: profile.picture ?? '' };
     },
     people() {
       return peopleRequest ??= readPeople();
