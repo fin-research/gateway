@@ -52,11 +52,15 @@ test('directory reads only organization members and scoped roles, preserving leg
   const owned = { id: 'rol_Owned', name: 'financing', owner_id: 'org_Eastmoney' };
   const foreign = { id: 'rol_Foreign', name: 'hasbai-admin', owner_id: 'org_Hasbai' };
   const dir = createDirectory(config, async input => {
-    const path = new URL(input).pathname; calls.push(path);
+    const url = new URL(input), path = url.pathname; calls.push(path);
     if (path === '/oauth/token') return Response.json({ access_token: 'fixture', expires_in: 100 });
     if (path === '/api/v2/roles') return Response.json([legacy, owned, foreign, { id: 'rol_Unrelated', name: 'tenant-admin' }]);
-    if (path === '/api/v2/organizations/org_Eastmoney/members') return Response.json([{ user_id: 'auth0|member' }]);
+    if (path === '/api/v2/organizations/org_Eastmoney/members') return Response.json([{ user_id: 'auth0|member', roles: [legacy, foreign] }]);
     if (path === '/api/v2/organizations/org_Eastmoney/members/auth0%7Cmember/roles') return Response.json([legacy, foreign]);
+    if (path === '/api/v2/users' && url.searchParams.get('q') === 'organization_id:"org_Eastmoney"')
+      return Response.json([{ user_id: 'auth0|member', email: 'member@18.cn', name: 'Member', email_verified: true,
+        identities: [{ connection: 'eastmoney-email' }] }, { user_id: 'auth0|foreign', email: 'foreign@18.cn',
+        identities: [{ connection: 'eastmoney-email' }] }]);
     if (path === '/api/v2/users/auth0%7Cmember') return Response.json({ user_id: 'auth0|member', email: 'member@18.cn', name: 'Member', email_verified: true, identities: [{ connection: 'eastmoney-email' }] });
     throw new Error('Unexpected directory request');
   });
@@ -64,8 +68,10 @@ test('directory reads only organization members and scoped roles, preserving leg
   const people = await dir.people();
   assert.equal(people.length, 1); assert.deepEqual(people[0].roles.map(r => r.id), [legacy.id]);
   await assert.rejects(dir.user('auth0|foreign'), { status: 403 });
-  assert.equal(calls.filter(p => p === '/api/v2/organizations/org_Eastmoney/members').length, 1);
-  assert.ok(!calls.includes('/api/v2/users') && !calls.some(p => p.includes('auth0%7Cforeign')));
+  assert.equal(calls.filter(p => p === '/api/v2/organizations/org_Eastmoney/members').length, 2);
+  assert.equal(calls.filter(path => path === '/api/v2/users').length, 1);
+  assert.ok(!calls.some(p => p.includes('auth0%7Cforeign')));
+  assert.ok(!calls.some(p => p.endsWith('/roles') && p.includes('/members/')));
 });
 
 test('directory profile update validates fields and limits the target to organization members', async () => {
@@ -94,22 +100,27 @@ test('directory profile update validates fields and limits the target to organiz
     { name: '新姓名', user_metadata: { department: '新部门' } });
 });
 
-test('directory loads organization members with bounded parallel requests', async () => {
+test('directory aggregates organization profiles and roles without individual reads', async () => {
   const config = { AUTH0_ORGANIZATION_ID: 'org_Eastmoney', AUTH0_DOMAIN: 'directory-batch.auth0.com',
     AUTH0_MANAGEMENT_CLIENT_ID: 'directory-batch', AUTH0_MANAGEMENT_CLIENT_SECRET: 'fixture' };
   const ids = Array.from({ length: 9 }, (_, index) => `auth0|member${index}`);
-  let activeProfiles = 0, maxProfiles = 0, memberRoleRequests = 0;
+  let profileReads = 0, memberRoleRequests = 0, aggregateReads = 0;
   const directory = createDirectory(config, async input => {
-    const path = new URL(input).pathname;
+    const url = new URL(input), path = url.pathname;
     if (path === '/oauth/token') return Response.json({ access_token: 'fixture', expires_in: 100 });
-    if (path === '/api/v2/organizations/org_Eastmoney/members') return Response.json(ids.map(user_id => ({ user_id })));
+    if (path === '/api/v2/organizations/org_Eastmoney/members') return Response.json(ids.map(user_id => ({ user_id,
+      roles: [{ id: 'rol_Site', name: 'authenticated' }] })));
     if (path === '/api/v2/roles') return Response.json([{ id: 'rol_Site', name: 'authenticated', owner_id: 'org_Eastmoney' }]);
     if (path.endsWith('/roles')) { memberRoleRequests++; return Response.json([{ id: 'rol_Site', name: 'authenticated' }]); }
+    if (path === '/api/v2/users') {
+      aggregateReads++;
+      assert.equal(url.searchParams.get('q'), 'organization_id:"org_Eastmoney"');
+      assert.equal(url.searchParams.get('search_engine'), 'v3');
+      return Response.json(ids.map(user_id => ({ user_id, email: `${user_id.slice('auth0|'.length)}@18.cn`, name: user_id,
+        email_verified: true, identities: [{ connection: 'eastmoney-email' }] })));
+    }
     if (path.startsWith('/api/v2/users/auth0%7Cmember')) {
-      activeProfiles++;
-      maxProfiles = Math.max(maxProfiles, activeProfiles);
-      await new Promise(resolve => setTimeout(resolve, 5));
-      activeProfiles--;
+      profileReads++;
       const id = decodeURIComponent(path.split('/').at(-1));
       return Response.json({ user_id: id, email: `${id.slice('auth0|'.length)}@18.cn`, name: id,
         email_verified: true, identities: [{ connection: 'eastmoney-email' }] });
@@ -118,11 +129,36 @@ test('directory loads organization members with bounded parallel requests', asyn
   });
   const people = await directory.people();
   assert.equal(people.length, ids.length);
-  assert.equal(maxProfiles, 4);
+  assert.equal(profileReads, 0);
   assert.ok(people.every(person => person.roles[0]?.id === 'rol_Site'));
-  assert.equal(memberRoleRequests, ids.length);
+  assert.equal(memberRoleRequests, 0);
   const profiles = await directory.people(false);
   assert.equal(profiles.length, ids.length);
   assert.ok(profiles.every(person => person.roles.length === 0));
-  assert.equal(memberRoleRequests, ids.length, 'profile view skips per-person role requests');
+  assert.equal(memberRoleRequests, 0);
+  assert.equal(profileReads, 0);
+  assert.equal(aggregateReads, 2);
+});
+
+test('directory reads only missing profiles individually when aggregate search is incomplete', async () => {
+  const config = { AUTH0_ORGANIZATION_ID: 'org_Eastmoney', AUTH0_DOMAIN: 'directory-fallback.auth0.com',
+    AUTH0_MANAGEMENT_CLIENT_ID: 'directory-fallback', AUTH0_MANAGEMENT_CLIENT_SECRET: 'fixture' };
+  const ids = ['auth0|a', 'auth0|b', 'auth0|c'];
+  const profileReads = [];
+  const directory = createDirectory(config, async input => {
+    const url = new URL(input), path = url.pathname;
+    if (path === '/oauth/token') return Response.json({ access_token: 'fixture', expires_in: 100 });
+    if (path === '/api/v2/organizations/org_Eastmoney/members') return Response.json(ids.map(user_id => ({ user_id })));
+    if (path === '/api/v2/users') return Response.json([{ user_id: ids[0], email: 'a@18.cn',
+      identities: [{ connection: 'eastmoney-email' }] }, { user_id: ids[1], email: 'b@18.cn' },
+    { user_id: 'auth0|foreign', email: 'foreign@18.cn', identities: [{ connection: 'eastmoney-email' }] }]);
+    if (path.startsWith('/api/v2/users/auth0%7C')) {
+      const id = decodeURIComponent(path.split('/').at(-1));
+      profileReads.push(id);
+      return Response.json({ user_id: id, email: `${id.split('|')[1]}@18.cn`, identities: [{ connection: 'eastmoney-email' }] });
+    }
+    throw new Error(`Unexpected directory path ${path}`);
+  });
+  assert.deepEqual((await directory.people(false)).map(person => person.id), ids);
+  assert.deepEqual(profileReads, ['auth0|b', 'auth0|c']);
 });

@@ -10,6 +10,7 @@ const userSchema = z.object({ user_id: z.string().regex(/^auth0\|\S+$/), email: 
   blocked: z.boolean().optional(), email_verified: z.boolean().optional(), picture: z.string().optional(),
   user_metadata: z.record(z.string(), z.unknown()).optional(), app_metadata: z.record(z.string(), z.unknown()).optional(),
   identities: z.array(z.object({ connection: z.string() })) });
+const memberSchema = z.object({ user_id: z.string().regex(/^auth0\|\S+$/), roles: z.array(roleSchema).optional().default([]) });
 export type Auth0Role = z.infer<typeof roleSchema>;
 export type DirectoryPerson = { id: string; name: string; department: string; email: string; active: boolean; roles: Auth0Role[] };
 const personChange = z.object({ id: z.string().regex(/^auth0\|\S+$/), name: z.string().trim().min(1).max(50), department: z.string().trim().max(100) }).strict();
@@ -36,11 +37,14 @@ export function createDirectory(config: Config, fetchImpl: typeof fetch = fetch)
   const members = () => memberRequest ??= manager.list(`${org}/members`).then(rows =>
     new Set(z.array(z.object({ user_id: z.string() })).parse(rows).map(member => member.user_id)));
 
-  async function user(id: string) {
-    if (!(await members()).has(id)) throw new AccessError(403, '账号不属于本站组织');
-    const parsed = userSchema.parse(await manager.request(`users/${encodeURIComponent(id)}`));
+  function siteUser(value: unknown, id: string) {
+    const parsed = userSchema.parse(value);
     if (parsed.user_id !== id || !parsed.identities.some((item) => item.connection === 'eastmoney-email')) throw new AccessError(403, '账号不属于本站');
     return parsed;
+  }
+  async function user(id: string) {
+    if (!(await members()).has(id)) throw new AccessError(403, '账号不属于本站组织');
+    return siteUser(await manager.request(`users/${encodeURIComponent(id)}`), id);
   }
   async function userRoles(id: string) {
     if (!(await members()).has(id)) throw new AccessError(403, '账号不属于本站组织');
@@ -48,16 +52,33 @@ export function createDirectory(config: Config, fetchImpl: typeof fetch = fetch)
     return z.array(roleSchema).parse(await manager.list(`${org}/members/${encodeURIComponent(id)}/roles`)).filter(role => allowed.has(role.id));
   }
   async function readPeople(includeRoles: boolean) {
-    const people: DirectoryPerson[] = [];
-    const organizationMembers = [...await members()];
-    for (let offset = 0; offset < organizationMembers.length; offset += 4) {
-      people.push(...await Promise.all(organizationMembers.slice(offset, offset + 4).map(async id => {
-        const [profile, assignedRoles] = await Promise.all([user(id), includeRoles ? userRoles(id) : Promise.resolve([])]);
-        return { id, name: profile.name || profile.email, department: department(profile), email: profile.email,
-          active: auth0ProfileCanLogin(profile), roles: assignedRoles };
-      })));
+    const organizationMembers = includeRoles
+      ? z.array(memberSchema).parse(await manager.list(`${org}/members?fields=user_id,roles&include_fields=true`))
+      : [...await members()].map(user_id => ({ user_id, roles: [] as Auth0Role[] }));
+    const memberIds = new Set(organizationMembers.map(member => member.user_id));
+    const query = new URLSearchParams({ q: `organization_id:"${config.AUTH0_ORGANIZATION_ID}"`, search_engine: 'v3',
+      fields: 'user_id,email,name,blocked,email_verified,picture,user_metadata,app_metadata,identities', include_fields: 'true' });
+    let searched: unknown[] = [];
+    try { searched = await manager.list(`users?${query}`); }
+    catch { console.warn(JSON.stringify({ event: 'auth0_directory_search_fallback' })); }
+    const profiles = new Map<string, z.infer<typeof userSchema>>();
+    for (const row of searched) {
+      const parsed = userSchema.safeParse(row);
+      if (parsed.success && memberIds.has(parsed.data.user_id)
+        && parsed.data.identities.some(identity => identity.connection === 'eastmoney-email')) profiles.set(parsed.data.user_id, parsed.data);
     }
-    return people.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+    const missing = organizationMembers.filter(member => !profiles.has(member.user_id));
+    for (let offset = 0; offset < missing.length; offset += 4) {
+      await Promise.all(missing.slice(offset, offset + 4).map(async member => {
+        profiles.set(member.user_id, siteUser(await manager.request(`users/${encodeURIComponent(member.user_id)}`), member.user_id));
+      }));
+    }
+    const allowedRoles = includeRoles ? new Set((await roles()).map(role => role.id)) : new Set<string>();
+    return organizationMembers.map(member => {
+      const profile = profiles.get(member.user_id)!;
+      return { id: member.user_id, name: profile.name || profile.email, department: department(profile), email: profile.email,
+        active: auth0ProfileCanLogin(profile), roles: member.roles.filter(role => allowedRoles.has(role.id)) };
+    }).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
   }
   return {
     roles, user, userRoles,
