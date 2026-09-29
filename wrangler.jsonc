@@ -24,7 +24,7 @@
     "AUTH0_AUDIENCE": "https://eastmoney.hasbai.xyz/",
     "AUTH0_MANAGEMENT_CLIENT_ID": "LA46CcB3FQ4Uac4JyEzPSObcV4PV8CFU",
     "AUTHORIZATION_MODE": "enforce",
-    "AUTH0_MACHINE_CLIENT_IDS": "9t8TBoWunhy0MXjI8rvXm6wgVb45nwnS"
+    "AUTH0_MACHINE_CLIENT_IDS": ""
   },
   "secrets": {
     "required": [

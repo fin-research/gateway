@@ -6,9 +6,9 @@ Auth0 的本站应用 `eastmoney` 使用自定义登录域 `auth.hasbai.xyz`；�
 
 其余注册 Action、中文主题、Hosted Form 与提示文案保留原业务流程。`eastmoney-signup-profile` 仍只处理新账号 pending 标记；姓名和部门不会授予权限或自动关联业务负责人。
 
-租户声明配置先按共享 AUTH 显式 export/plan/apply，禁止删除其他资源。常规 Action 发布只变更目标 code，保留当前 Secret、依赖和 post-login 绑定；凭据合并使用下述专用流程，禁止覆盖其他未发布草稿。部署前后读取当前配置验证，不能以本地 Action 文件推断线上状态。
+本地租户管理按[共享 AUTH](../../eastmoney/docs/AUTH.md#auth0-本地租户管理) 使用 Auth0 skill 和 `auth0` CLI，先复用已有授权、读取目标当前配置，再执行精确变更并回读。常规 Action 发布只变更目标 code，保留当前 Secret、依赖和 post-login 绑定；禁止覆盖其他会话的未发布草稿。不能以本地 Action 文件推断线上状态。
 
-Quant 使用独立机器应用 `eastmoney quant gateway`；只授予 Gateway API 的 `data.choice:read`，不授予 Auth0 Management API 或用户角色。Secret 不进入 Git、文档、浏览器或日志。
+Quant 旧机器应用 `eastmoney quant gateway` 已退役；Gateway 的机器客户端白名单为空。若将来恢复机器 Choice 调用，须重新建立精确的应用、scope 和白名单，并验证 Quant 调用链；Secret 不进入 Git、文档、浏览器或日志。
 
 具体发布与回退见 [DEVELOPMENT](../docs/DEVELOPMENT.md)。
 
@@ -18,17 +18,17 @@ Quant 使用独立机器应用 `eastmoney quant gateway`；只授予 Gateway API
 
 `/auth/login?popup=<32–64 位随机 ID>` 将 popup ID 与 state、nonce、PKCE 一起写入加密事务。回调仅从已验证事务读取 ID；成功设置 HttpOnly Cookie，再输出无凭据的 HTML 完成通知。回调页面使用 nonce CSP、no-store 和 no-referrer，清除地址栏 OAuth 参数；父页校验消息后重新读取 `/auth/session`。普通直接访问的重定向登录流程继续可用。
 
-令牌时长变更使用 Deploy CLI 导出 `resourceServers`，只修改本站 API 两个 lifetime 字段，保留导出中其他 API 原配置；plan 确認仅本站 API 更新后 apply，并再次 export 回读。
+令牌时长变更先用 Auth0 CLI 回读本站 API，只更新其两个 lifetime 字段，保留其他 API 原配置；执行后再次回读核验。
 
 ## Eastmoney 组织隔离
 
-网站与 MCP 用户登录绑定 `org_6yvoRRCkzk3eGkBS`，Gateway 校验 `org_id`；账号目录和成员角色使用本组织范围。当前套餐不支持 M2M Organizations，Quant 保留单独 Choice 白名单。应用盘点、迁移、套餐限制与回退见 [组织与应用边界](../docs/AUTH0_ORGANIZATIONS.md)。
+网站与 MCP 用户登录绑定 `org_6yvoRRCkzk3eGkBS`，Gateway 校验 `org_id`；账号目录和成员角色使用本组织范围。当前套餐不支持 M2M Organizations；旧 Quant Choice 白名单已清空。应用盘点、迁移、套餐限制与回退见 [组织与应用边界](../docs/AUTH0_ORGANIZATIONS.md)。
 
 ## 统一 Gateway M2M
 
 `eastmoney gateway management` 复用原 Gateway identity management 的 client ID 和 Secret，声明为 `gateway-management-client.yaml`。Gateway 的 `AUTH0_MANAGEMENT_*`、登录 Action 的 `ROLES_CLIENT_*`、注册资料 Action 的 `PROFILE_CLIENT_*` 使用同一凭据。Secret 名保留以兼容现有 Action；Secret 值不写入声明文件。
 
-合并流程（在 Gateway 工作树运行，根 `.env` 通过 `AUTH_TEST_ENV_FILE` 指定）：
+以下是已完成的历史合并流程，依赖当时的 Deploy CLI 机器凭据，不是新的租户管理入口；不得用它重新导入旧快照（当时在 Gateway 工作树运行，根 `.env` 通过 `AUTH_TEST_ENV_FILE` 指定）：
 
 1. 显式 `auth0:export -- --include=clients,clientGrants,actions,forms,flows,flowVaultConnections --output=.auth0-deploy/m2m-before`，再执行 `node --use-env-proxy scripts/consolidate-management-clients.mjs plan` 保存无 Secret 快照。
 2. 对 `auth0/gateway-management-client.yaml` 执行 `auth0:plan` / `auth0:apply -- --include=clients,clientGrants`，回读确认复用原 client ID。
