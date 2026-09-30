@@ -1,5 +1,5 @@
 const token = process.env.CLOUDFLARE_API_TOKEN;
-if (!token) throw new Error('CLOUDFLARE_API_TOKEN is required; use project cloudflare_env.py');
+if (!token) throw new Error('CLOUDFLARE_API_TOKEN is required');
 const account = '5cecc63c78acf8f5473f8745f4244448';
 const zone = 'e0665efd9fd68d06cbb9ab68a13cc7c6';
 let failed = false;

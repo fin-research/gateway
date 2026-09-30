@@ -109,7 +109,11 @@ try {
   const peoplePage = await respond('/management/people', true, { headers: { ...adminHeaders, Accept: 'text/html' } });
   assert.equal(peoplePage.status, 200);
   assert.match(await peoplePage.text(), /人员资料/);
-  assert.deepEqual(identityPaths.slice(beforeDirectory), ['/directory/people?view=profiles']); checks++;
+  assert.deepEqual(identityPaths.slice(beforeDirectory), []); checks++;
+  const peopleResponse = await respond('/api/management/people', true, { headers: adminHeaders });
+  assert.equal(peopleResponse.status, 200);
+  assert.deepEqual((await peopleResponse.json()).map(({ id, department }) => ({ id, department })),
+    [{ id: 'auth0|member', department: '旧部门' }]); checks++;
   assert.equal(aggregateReads, 1);
   assert.equal(individualProfileReads, 0); checks++;
   beforeDirectory = identityPaths.length;

@@ -16,7 +16,7 @@ const includeCredit = process.argv.includes('--credit');
 const upstreams = ['data', 'research', ...(includeDashboard ? ['dashboard'] : []), ...(includeCredit ? ['credit'] : [])];
 const checkCatalog = process.argv.includes('--check-catalog');
 let dataReauthorizationStarted = false;
-if (checkCatalog && !process.env.CLOUDFLARE_API_TOKEN) throw new Error('--check-catalog requires CLOUDFLARE_API_TOKEN; use project cloudflare_env.py');
+if (checkCatalog && !process.env.CLOUDFLARE_API_TOKEN) throw new Error('--check-catalog requires CLOUDFLARE_API_TOKEN');
 if (process.argv.includes('--data-only') && (reauthorizeData || checkCatalog || includeDashboard || includeCredit)) throw new Error('Portal verification options cannot be used with --data-only');
 
 function checked(value, base) {

@@ -7,9 +7,10 @@ import { login, callback, logout, clearLegacyCookies } from './session.ts';
 import { dataRequest } from './data.ts';
 import { permissionCache } from './lib/server/permission-cache.ts';
 import { profileRequest } from './identity-service.ts';
+import { createDirectory } from './lib/server/auth0-directory.ts';
 import { publicSession } from './lib/identity.ts';
 import { Hono } from 'hono';
-import { ProfileError } from './lib/server/profile.ts';
+import { ProfileError, readProfileJson } from './lib/server/profile.ts';
 
 export const app = new Hono<{ Bindings: Env }>({ strict: false });
 app.use('*', async (c, next) => {
@@ -42,6 +43,15 @@ app.all('*', async c => {
     }
     if (path === '/auth/session') return Response.json({ ...publicSession(user), enabled: true }, { headers: { 'Cache-Control': 'no-store, private', Vary: 'Cookie, Authorization' } });
     if (path === '/api/profile') return await profileRequest(request, env, user);
+    if (path === '/api/management/people') {
+      const headers = { 'Cache-Control': 'no-store, private', Vary: 'Cookie, Authorization' };
+      if (request.method === 'GET' || request.method === 'HEAD') {
+        const response = Response.json(await createDirectory(env).people(false), { headers });
+        return request.method === 'HEAD' ? new Response(null, response) : response;
+      }
+      if (!request.headers.get('Content-Type')?.includes('application/json')) throw new ProfileError(415, '请提交 JSON 格式的人员资料');
+      return Response.json(await createDirectory(env).updatePerson(await readProfileJson(request, 4096)), { headers });
+    }
     const response = await env.DASHBOARD.fetch(forwardedRequest(request, { version: 1, user, choice: { status: 401 } }));
     if (response.status === 101) return response;
     const result = new Response(response.body, response);

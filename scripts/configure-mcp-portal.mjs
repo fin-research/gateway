@@ -1,4 +1,4 @@
-// Run through the project cloudflare_env.py; Auth0's MCP client secret stays in memory.
+// Load the project .env with Node's --env-file; Auth0's MCP client secret stays in memory.
 import { management } from './lib/auth0-management.mjs';
 import { addChatGptRedirectUris } from './lib/mcp-client-redirects.mjs';
 import { portalServerSettings } from './lib/mcp-portal-servers.mjs';
@@ -10,7 +10,7 @@ const organizationId = 'org_6yvoRRCkzk3eGkBS';
 const origin = 'https://mcp.hasbai.xyz';
 const apiOrigin = 'https://eastmoney.hasbai.xyz';
 const token = process.env.CLOUDFLARE_API_TOKEN;
-if (!token) throw new Error('CLOUDFLARE_API_TOKEN is required; use project cloudflare_env.py');
+if (!token) throw new Error('CLOUDFLARE_API_TOKEN is required');
 async function api(path, method = 'GET', body) {
   const response = await fetch('https://api.cloudflare.com/client/v4/' + path, { method, redirect: 'error', signal: AbortSignal.timeout(45000),
     headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });

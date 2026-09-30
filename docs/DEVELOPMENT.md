@@ -8,8 +8,8 @@ Gateway 是独立 Hono Worker。用户、角色与成员关系属于 Auth0；JWT
 - `src/tokens.ts` / `session.ts`：固定 Auth0 JWKS、RS256/issuer/audience/azp/时效、PKCE/state/nonce、标准 JWT 会话 Cookie、加密登录事务、退出。
 - `src/lib/server/authorization.ts`：JWT 角色快照与正常权限检查；授权 JSON 缓存见 `permission-cache.ts`。
 - `src/lib/permissions.ts` / `route-permissions.ts` / `server/permission-policy.ts`：唯一权限目录及路由策略。前两份通过 `scripts/sync-dashboard-contracts.mjs` 同步到 Dashboard 供菜单与导航使用。
-- `src/identity-service.ts`：私有 `IdentityService`，账号目录、MCP 业务调用路由授权桥接与角色配置；管理员姓名、部门更新写入 Auth0，角色授权只读。
-- `/directory/people?view=profiles` 为管理页读取姓名、部门等资料；先读取组织成员 ID，再用 Auth0 用户搜索聚合读取资料，并只返回组织成员与本站连接的交集。完整目录还从组织成员列表聚合读取角色并按本站角色过滤。聚合搜索缺少成员或不可用时，仅对缺漏成员以最多四人一批读取；权限缓存冷加载仍以最多四角色一批并行读取。管理员资料 PATCH 成功后按已校验请求返回字段，不依赖 Auth0 返回完整用户结构。
+- `src/identity-service.ts`：私有 `IdentityService`，账号目录、MCP 业务调用路由授权桥接与角色配置；保留原人员编辑私有入口供旧版本过渡。公网 `/api/management/people` 由 Gateway 直接处理管理员姓名、部门读取和写入，不经过 Dashboard。
+- `/api/management/people` 的 GET 读取姓名、部门等资料；先读取组织成员 ID，再用 Auth0 用户搜索聚合读取资料，并只返回组织成员与本站连接的交集。完整私有目录还从组织成员列表聚合读取角色并按本站角色过滤。聚合搜索缺少成员或不可用时，仅对缺漏成员以最多四人一批读取；权限缓存冷加载仍以最多四角色一批并行读取。管理员资料 PATCH 成功后按已校验请求返回字段，不依赖 Auth0 返回完整用户结构。
 - `src/data.ts`：Data 公开资源、GraphQL 执行操作/别名/片段的 Choice 字段判定和机器作用域。
 - `src/forward.ts`：删除外部凭据/身份头，生成版本化 UTF-8 Base64URL 上下文。传输头不是认证凭据，信任来自命名 Service Binding 的可达性。
 

@@ -48,8 +48,7 @@ Code Mode 当前关闭。工具定义和执行由 Cloudflare 转发；研究查�
 - Auth0 Action 发布只 patch code，保留 Secret、依赖和绑定；MCP client ID 与 Wrangler 配置同步。
 
 Cloudflare 凭据按[项目组规则](../../eastmoney/docs/CLOUDFLARE.md)使用根目录未跟踪 `.env` 的
-`CLOUDFLARE_AGENT_TOKEN`。需要 API Token 的脚本通过[项目组包装脚本](../../eastmoney/scripts/cloudflare_env.py)
-运行，子进程接收同值的 `CLOUDFLARE_API_TOKEN`；不输出 Token。
+`CLOUDFLARE_API_TOKEN`。Node 脚本使用 `--env-file=../eastmoney/.env` 读取；不输出 Token。
 
 ## 验证
 
@@ -101,10 +100,10 @@ HTTP 注册检查不等同于 ChatGPT 界面内完整连接验收。
 恢复命令（仅重建测试账号的 Data 授权）：
 
 ```sh
-NO_PROXY=mcp.hasbai.xyz python3 /Users/yueshi/src/eastmoney/eastmoney/scripts/cloudflare_env.py -- node --use-env-proxy scripts/verify-managed-mcp.mjs --reauthorize-data --check-catalog
+NO_PROXY=mcp.hasbai.xyz node --env-file=../eastmoney/.env --use-env-proxy scripts/verify-managed-mcp.mjs --reauthorize-data --check-catalog
 ```
 
-通过[项目组包装脚本](../../eastmoney/scripts/cloudflare_env.py)执行上述 Node 命令，并对子进程设置 `NO_PROXY`。
+通过 Node 的 `--env-file` 执行上述命令，并对进程设置 `NO_PROXY`。
 `--check-catalog` 需要 `MCP Portals Read` 或 `Write` 权限：核对后台 Ready、成功同步时间及实时工具目录。
 Cloudflare 的 manual OAuth 能力快照只在首位用户授权时捕获，后续同步不会刷新；Data 和 Dashboard
 后台快照与当前用户目录的差异会明确报告，但不作为用户调用失败。原生 Credit 的后台目录则须与实时目录一致。
@@ -117,7 +116,7 @@ Cloudflare 的 manual OAuth 能力快照只在首位用户授权时捕获，后�
 
 Dashboard 使用 SvelteKit + Cloudflare Agents MCP SDK v2，接口与工具目录由 [Dashboard MCP](../../dashboard/docs/MCP.md) 维护。Gateway `src/mcp-bridge.ts` 通过既有 IDENTITY 私有 binding 接收 `/mcp/policies` 和 `/mcp/dispatch`；每次按当前角色缓存和真实 route/action policy 校验，再经 `GatewayDashboard` 执行原业务 handler。没有新服务账户、JWT 转发或公开桥接入口。匿名/Quant 拒绝；专用 Portal JWT 的范围仅新增 `/api/mcp`。
 
-通过[项目组包装脚本](../../eastmoney/scripts/cloudflare_env.py)运行 `node --use-env-proxy scripts/configure-mcp-portal.mjs dashboard` 可幂等添加上游、其 18.cn/专用 IdP Access 应用和 `on_behalf=true` 映射；保留现有 Data/研究库和工具策略。Gateway 授权桥接先发布，再发布 Dashboard，最后配置门户。
+运行 `node --env-file=../eastmoney/.env --use-env-proxy scripts/configure-mcp-portal.mjs dashboard` 可幂等添加上游、其 18.cn/专用 IdP Access 应用和 `on_behalf=true` 映射；保留现有 Data/研究库和工具策略。Gateway 授权桥接先发布，再发布 Dashboard，最后配置门户。
 
 程序化验收：`AUTH_TEST_ENV_FILE` 指向项目组未跟踪 `.env`，运行 `NO_PROXY=mcp.hasbai.xyz node --use-env-proxy scripts/verify-managed-mcp.mjs --dashboard --check-catalog`。检查 managed OAuth、三个上游、Dashboard 业务读取、无效写入拒绝和后台 Ready。这个只读/无效输入验收不等于真实写入或每个 AI 工具逐项执行。
 
@@ -135,7 +134,7 @@ Data、Dashboard、research 映射不变。门户内 Credit Access 应用允许�
 在 Gateway 仓库使用程序化登录验收：
 
 ```sh
-NO_PROXY=mcp.hasbai.xyz python3 ../eastmoney/scripts/cloudflare_env.py -- node --use-env-proxy scripts/verify-managed-mcp.mjs --dashboard --credit --check-catalog
+NO_PROXY=mcp.hasbai.xyz node --env-file=../eastmoney/.env --use-env-proxy scripts/verify-managed-mcp.mjs --dashboard --credit --check-catalog
 ```
 
 该命令确认四个上游连接、
