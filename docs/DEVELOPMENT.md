@@ -34,7 +34,7 @@ git diff --check
 
 Worker 运行时仅需要 `AUTH0_MANAGEMENT_CLIENT_SECRET`；旧 `AUTH0_CLIENT_SECRET`、`SESSION_SECRET` 不再由代码读取。Gateway 不再绑定权限数据库；使用命名 Cache API `eastmoney-permissions-v1`，不需要 KV、Durable Object 或数据库 migration。
 
-生产公开 origin、Auth0 issuer/API audience、用户 client ID 和机器 client ID allowlist 均在 Wrangler vars。Quant 机器应用退役后 allowlist 为空；重新开放机器访问须另行审查 client、scope 和调用链。JWT 保存登录时的角色 ID/名称与资料，不含应用有效权限快照；每个受保护请求按 JWT 角色读取缓存授权并检查路由权限，只有 `enforce` 模式可用。角色成员变更在重新登录或个人资料页“刷新登录角色”取得新 token 后生效。
+生产公开 origin、Auth0 issuer/API audience、用户 client ID 和机器 client ID allowlist 均在 Wrangler vars。Quant 机器应用退役后 allowlist 为空；重新开放机器访问须另行审查 client、scope 和调用链。JWT 保存登录时的角色名称与资料，不含应用有效权限快照；每个受保护请求按 JWT 角色读取缓存授权并检查路由权限，只有 `enforce` 模式可用。角色成员变更在重新登录或个人资料页“刷新登录角色”取得新 token 后生效。
 
 公开首页保留匿名访问，账号与入口可见性由客户端 JWT 展示和 `/auth/permissions` 结果初始化。Dashboard 根 layout 不再从 SSR 注入登录快照。Gateway 对显式带 Bearer 的首页仍验签和检查当前授权；读取失败以匿名首页继续，不向后端传递部分授权。
 
@@ -82,7 +82,7 @@ Auth0 Management API 的账号、角色读取及管理 token 获取遇到 429 �
 
 - 历史 RBAC 迁移使用 `scripts/prepare-rbac.mjs` 和受限 Deploy CLI 导出；不要重放旧导出。后续 API scope、角色和成员调整按共享 AUTH 的 CLI 流程逐项读取、修改并回读，保留其他 audience 权限。
 - 本站业务权限注册到 Gateway audience；API 启用 RBAC，但 `token_dialect=access_token`，不启用 Add Permissions in the Access Token。用户 JWT 只声明身份与角色；旧机器 Choice scope 保留为历史 API 定义，不构成客户端授权。
-- 内测给所有本站组织成员配置 `authenticated`，但授信维护权限仅对当前 Auth0 目录确认的 `credit` 或全站 `admin` 角色生效。新用户通过登录 Action 自动获得基础角色；`credit` 角色须由组织管理员明确分配。其它权限仍按现有角色授权。
+- 内测给所有本站组织成员配置 `authenticated`，但授信维护权限仅对当前 Auth0 目录确认的 `credit` 或全站 `admin` 角色生效。新用户的基础角色通过 Auth0 组织成员关系分配；`credit` 角色须由组织管理员明确分配。其它权限仍按现有角色授权。
 - `node --use-env-proxy scripts/provision-credit-role.mjs plan/apply/verify` 仅建立本站组织 `credit` 角色、授予授信读写并移除其它非管理员角色的授信更新授权；不自动分配成员。运行前后核对输出，角色成员通过 Auth0 组织成员管理。
 - Gateway 将本站角色目录与授权序列化为一个 JSON Response，保存在命名 Cloudflare Cache API 中。TTL 为 3600 秒；请求命中时不查询 Auth0，缺失/过期时完整读取并替换；读取失败返回 503，不使用过期或半份授权。
 - Cache API 按 Cloudflare 节点存储，无后台定时器。所谓一小时同步为按需过期更新；手动刷新只影响当前节点，其他节点到期后各自更新。
