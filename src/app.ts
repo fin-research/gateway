@@ -59,7 +59,7 @@ app.all('*', async c => {
     if (response.status === 101) return response;
     const result = new Response(response.body, response);
     if (user) {
-      result.headers.set('Cache-Control', 'no-store, private');
+      result.headers.set('Cache-Control', path === '/financing-model/research' ? 'no-store, private, no-transform' : 'no-store, private');
       result.headers.append('Vary', 'Cookie, Authorization');
     }
     result.headers.set('X-Eastmoney-Gateway', '1');

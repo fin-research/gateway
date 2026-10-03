@@ -18,7 +18,7 @@ test('Quant report inherits the model read policy and uses only the named report
   for (const method of ['GET', 'HEAD']) {
     const response = await gatewayRequest(f.request('/financing-model/research', { token, method, headers: { Cookie: 'untrusted=secret', 'X-User-Id': 'attacker' } }), f.env);
     assert.equal(response.status, 200);
-    assert.equal(response.headers.get('Cache-Control'), 'no-store, private');
+    assert.equal(response.headers.get('Cache-Control'), 'no-store, private, no-transform');
     assert.match(response.headers.get('Content-Type'), /^text\/html/);
     if (method === 'HEAD') assert.equal(await response.text(), '');
     const forwarded = calls.at(-1);
