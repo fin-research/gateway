@@ -32,10 +32,10 @@ app.all('*', async c => {
     const request = c.req.raw, env = c.env;
     const path = canonicalPath(request);
     const route = dashboardRoute(request);
-    const { user } = await authorizeRequest(request, env, route);
+    const { user, permissionUpdatedAt } = await authorizeRequest(request, env, route);
     if (path === '/auth/permissions') {
-      const snapshot = await permissionCache(env).permissions(user!.authorization!.roles);
-      return Response.json({ roles: user!.authorization!.roles, ...snapshot }, { headers: { 'Cache-Control': 'no-store, private', Vary: 'Cookie, Authorization' } });
+      return Response.json({ roles: user!.authorization!.roles, permissions: user!.authorization!.permissions, updatedAt: permissionUpdatedAt },
+        { headers: { 'Cache-Control': 'no-store, private', Vary: 'Cookie, Authorization' } });
     }
     if (path === '/auth/permissions/refresh') {
       const snapshot = await permissionCache(env).refresh();

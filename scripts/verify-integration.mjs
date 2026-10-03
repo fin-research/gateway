@@ -56,8 +56,10 @@ try {
     return server.respond(new Request(request, { headers }), { getClientAddress: () => '127.0.0.1', platform: { env: { ...appEnv, GATEWAY_CONTEXT: context }, context: { waitUntil() {} } } });
   } };
   f.env.DATA = { fetch: request => handleGatewayRequest(request, {}) };
-  const token = await f.signed();
-  const adminToken = await f.signed({ user: { ...f.userClaims, roles: [{ id: 'rol_TestAdmin', name: 'admin' }] } });
+  const flat = process.argv.includes('--flat-claims');
+  const token = await f.signed(flat ? { user: undefined, ...f.flatClaims } : {});
+  const adminToken = await f.signed(flat ? { user: undefined, ...f.flatClaims, _roles: ['admin'] }
+    : { user: { ...f.userClaims, roles: [{ id: 'rol_TestAdmin', name: 'admin' }] } });
   const respond = (path, authenticated = true, init = {}) => gatewayRequest(f.request(path, {
     ...init, headers: { ...(authenticated ? { Cookie: SESSION_COOKIE + '=' + token } : {}), ...init.headers },
   }), f.env);
@@ -132,5 +134,5 @@ try {
     headers: { ...adminHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...change, id: 'auth0|foreign' }) });
   assert.equal(foreignResponse.status, 403);
   assert.equal(personnelPatch, undefined); checks++;
-  console.log(JSON.stringify({ integration: true, checks, gateway: 'Hono', dashboard: 'built SvelteKit', data: 'bundled real handler', externalServices: 'mocked', browserUsed: false }));
+  console.log(JSON.stringify({ integration: true, claims: flat ? 'flat' : 'legacy', checks, gateway: 'Hono', dashboard: 'built SvelteKit', data: 'bundled real handler', externalServices: 'mocked', browserUsed: false }));
 } finally { for (const fn of cleanup) fn(); await rm(directory, { recursive: true, force: true }); }

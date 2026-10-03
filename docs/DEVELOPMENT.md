@@ -28,7 +28,7 @@ pnpm deploy:dry
 git diff --check
 ```
 
-先构建 Dashboard，再在此运行 `node scripts/verify-integration.mjs`。默认同级 Dashboard/Data；工作树通过 `DASHBOARD_CHECKOUT` / `DATA_CHECKOUT` 指定。该脚本执行真实 SvelteKit/Data handler，但 Auth0、数据库和业务上游使用模拟实现。权限验收禁止 browser。
+先构建 Dashboard，再在此分别运行 `node scripts/verify-integration.mjs` 和 `node scripts/verify-integration.mjs --flat-claims` 验证旧、新声明。默认同级 Dashboard/Data；工作树通过 `DASHBOARD_CHECKOUT` / `DATA_CHECKOUT` 指定。该脚本执行真实 SvelteKit/Data handler，但 Auth0、数据库和业务上游使用模拟实现。权限验收禁止 browser。
 
 `pnpm auth:verify` 使用项目组根 `.env` 的 `test@18.cn` 做真实 HTTP 登录和只读探针。`AUTH_TEST_ENV_FILE` 可指定文件；密码只向固定 Auth0 登录 origin 提交一次。验证码/MFA/验证邮箱阻断必须报告，不关闭保护或用机器身份替代。
 
@@ -46,9 +46,11 @@ Worker Secret：`AUTH0_CLIENT_SECRET`、`AUTH0_MANAGEMENT_CLIENT_SECRET`、`SESS
 
 ### 自定义字段名称
 
-Auth0 登录 Action 将业务信息签入一个短的 `user` claim：`user.roles` 保存角色 ID/名称，`user.profile` 保存现有资料，`user.email` 保存邮箱。JWT 仍由 Auth0 签发，Gateway 原样保存，不重签、不删改 token。自定义字段不再带 URL 前缀；顶层 `roles` 是 Auth0 受限 claim，因此放在 `user` 内，不覆盖 OIDC 标准 `profile` 字段。
+当前绑定的 Auth0 `login claims` Action（`35884b07-e1f4-4ab8-b66c-0325d5a055e4`）签入顶层 `username`、`email`、`role`、`_roles`；本站组织还提供可选 `department`、`picture`。`role` 是数据库使用的字符串，Gateway 不用它授予业务权限；`_roles` 是业务角色名称数组。顶层 `roles` 是 Auth0 保留字段，不作为自定义角色来源。
 
-现有带 URL 字段的 token 仅兼容读取至原到期时间；`user` 存在时整体以它为准，缺字段或格式错误会拒绝，不从旧字段拼补。机器 token 和非本站应用保持原结构。
+Gateway 先验证 Auth0 签名、issuer、audience、client、org、subject 和时效，再把 `_roles` 精确匹配到当前组织权限缓存中的角色 ID。同一次请求的角色解析、admin/credit 检查和权限合并共用一份缓存快照，不按用户回查 Management API。空数组只表示没有业务角色；缺失、格式错误、重复、未知或歧义名称拒绝并要求刷新登录。`username` 映射为显示姓名；缺失时显示邮箱，缺失部门和头像使用空值。不伪造旧版 connection/verified 声明；当前组织仅启用 `eastmoney-email`，登录 Action 在签发时拒绝封禁账号和未验证邮箱。
+
+现有 nested `user` 和 URL 字段 token 兼容至原到期时间。`_roles`、`username` 或 `role` 任一字段出现即使用新格式，缺字段或格式错误不得从旧字段补值。JWT 仍原样保存，不重签、不修改，Gateway 到 Dashboard/Data 的身份契约保持不变。
 
 字段规则见 [Auth0 Custom Claims](https://auth0.com/docs/secure/tokens/json-web-tokens/create-custom-claims)。
 
@@ -56,7 +58,7 @@ Auth0 登录 Action 将业务信息签入一个短的 `user` claim：`user.roles
 
 当前本地租户管理按[共享 AUTH](../../eastmoney/docs/AUTH.md#auth0-本地租户管理) 使用 Auth0 skill 和 `auth0` CLI：先检查现有授权，再读取目标资源、执行精确变更并回读。`scripts/prepare-gateway-tenant.mjs` 是初次迁移时从受限导出生成配置的历史脚本，不应重跑以覆盖现有角色、成员、注册 Form 或迁移账号例外。
 
-登录 Action 为 `auth0/actions/eastmoney-login.cjs`，给本站 API access token 添加 `user.email`、`user.roles` 与 `user.profile`；Auth0 原生 `sub` 即用户主键。Action 在登录时从事件取得角色名称，通过统一的 `eastmoney gateway management` 机器应用解析稳定角色 ID，并给未持有 `authenticated` 的本组织用户增量分配基础角色；同一应用还供 Gateway 身份服务和注册资料 Action 使用。六项 Management API 权限及固定 client ID 见 `auth0/gateway-management-client.yaml`；`scripts/publish-login-claims.mjs` 先 plan、再 `--apply`，受控更新代码，保留现有 Secrets、依赖与绑定并回读 deployed version。旧 token 缺少角色声明时要求重新登录。确认 Gateway 切换完成后移除本站应用的旧 Access callback/logout 白名单。
+线上登录声明以当前已绑定、已部署的 `login claims` Action 为准；通过 Auth0 CLI 读取绑定与 deployed version 核对。`auth0/actions/eastmoney-login.cjs` 和 `scripts/publish-login-claims.mjs` 是旧 nested `user` 协议的历史实现，不能重新发布或恢复旧绑定。基础角色由 Auth0 成员关系管理，当前通用 Action 不自动分配角色。Gateway 身份服务与注册资料 Action 仍使用 `eastmoney gateway management` 应用，配置见 `auth0/gateway-management-client.yaml`。
 
 ## 生产交付
 

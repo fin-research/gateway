@@ -1,14 +1,23 @@
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey, type JWTPayload } from 'jose';
 import { AccessError } from './lib/server/access.ts';
 
+type UserClaims = { format: 'flat' | 'legacy'; email: unknown; roles: unknown; profile: unknown };
+
 /** Called only with an Auth0-verified payload. Existing JWTs retain their old claim names until expiry. */
-export function userClaims(payload: JWTPayload): Record<string, unknown> {
+export function userClaims(payload: JWTPayload): UserClaims {
+  // A partial new shape must not downgrade to a complete legacy identity.
+  if (['_roles', 'username', 'role'].some(key => Object.hasOwn(payload, key))) {
+    return { format: 'flat', email: payload.email, roles: payload._roles,
+      profile: { name: payload.username === undefined ? '' : payload.username,
+        department: payload.department === undefined ? '' : payload.department, picture: payload.picture === undefined ? '' : payload.picture } };
+  }
   if (Object.hasOwn(payload, 'user')) {
     if (!payload.user || typeof payload.user !== 'object' || Array.isArray(payload.user)) throw new AccessError(401, '登录凭证无效');
     // A present new claim is authoritative; never fill malformed fields from legacy claims.
-    return payload.user as Record<string, unknown>;
+    const user = payload.user as Record<string, unknown>;
+    return { format: 'legacy', email: user.email, roles: user.roles, profile: user.profile };
   }
-  return { roles: payload['https://eastmoney.hasbai.xyz/roles'], profile: payload['https://eastmoney.hasbai.xyz/profile'], email: payload['https://eastmoney.hasbai.xyz/email'] };
+  return { format: 'legacy', roles: payload['https://eastmoney.hasbai.xyz/roles'], profile: payload['https://eastmoney.hasbai.xyz/profile'], email: payload['https://eastmoney.hasbai.xyz/email'] };
 }
 const keySets = new Map<string, JWTVerifyGetKey>();
 type TokenConfig = Pick<Env, 'AUTH0_LOGIN_DOMAIN' | 'AUTH0_AUDIENCE' | 'AUTH0_CLIENT_ID' | 'AUTH0_ORGANIZATION_ID' | 'AUTH0_MACHINE_CLIENT_IDS'>;

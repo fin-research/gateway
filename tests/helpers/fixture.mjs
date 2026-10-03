@@ -9,6 +9,7 @@ export async function fixture(t) {
     AUTH0_MANAGEMENT_CLIENT_ID: crypto.randomUUID(), AUTH0_MANAGEMENT_CLIENT_SECRET: 'unit-management', AUTHORIZATION_MODE: 'enforce',
     AUTH0_MACHINE_CLIENT_IDS: 'quant', SESSION_SECRET: Buffer.alloc(32, 7).toString('base64url') };
   let grants = [...PERMISSION_CODES];
+  let catalogue = [{id:'rol_Authenticated',name:'authenticated',description:''},{id:'rol_TestAdmin',name:'admin',description:''}];
   const saved = new Map();
   const jsonCache = { match: async key => saved.get(String(key))?.clone(), put: async (key,value) => saved.set(String(key),value.clone()) };
   const originalCaches = globalThis.caches;
@@ -17,7 +18,7 @@ export async function fixture(t) {
   const key=new URL(`/__gateway-permissions/v1/${env.AUTH0_ORGANIZATION_ID}`,env.SITE_ORIGIN);
   key.searchParams.set('audience',env.AUTH0_AUDIENCE);
   const cache = new PermissionCacheStore(jsonCache,key.href,
-    async () => ({version:1,updatedAt:Date.now(),roles:[{id:'rol_Authenticated',name:'authenticated',description:''},{id:'rol_TestAdmin',name:'admin',description:''}],configurations:{rol_Authenticated:{permissions:grants}}}));
+    async () => ({version:1,updatedAt:Date.now(),roles:catalogue,configurations:{rol_Authenticated:{permissions:grants}}}));
   await cache.refresh();
   const calls = { dashboard: [], data: [], auth0: [] };
   env.DASHBOARD = { async fetch(request) { calls.dashboard.push(request); return Response.json({ reached: 'dashboard' }); } };
@@ -40,6 +41,7 @@ export async function fixture(t) {
   };
   t.after(() => { globalThis.fetch = original; });
   const userClaims = { roles: [{id:'rol_Authenticated',name:'authenticated'}], profile: {name:'测试账号',department:'测试',picture:'',connection:'eastmoney-email',verified:true}, email: 'test@18.cn' };
+  const flatClaims = { username: '测试账号', email: 'test@18.cn', role: 'authenticated', _roles: ['authenticated'], department: '测试', picture: '' };
   async function signed(overrides = {}, kind = 'access') {
     const now = Math.floor(Date.now() / 1000);
     return new SignJWT({ iss: `https://${env.AUTH0_LOGIN_DOMAIN}/`, aud: kind === 'access' ? env.AUTH0_AUDIENCE : env.AUTH0_CLIENT_ID,
@@ -49,5 +51,6 @@ export async function fixture(t) {
   const request = (path, { token, method = 'GET', headers = {}, body } = {}) => new Request(env.SITE_ORIGIN + path, {
     method, headers: { Origin: env.SITE_ORIGIN, ...(token ? { Authorization: 'Bearer ' + token } : {}), ...headers }, body,
   });
-  return { env, calls, signed, jwk, request, cache, userClaims, async updateGrants(value) { grants = value; await cache.refresh(); }, updateProfile(value) { profile = { ...profile, ...value }; }, intercept(fn) { customFetch = fn; } };
+  return { env, calls, signed, jwk, request, cache, userClaims, flatClaims, async updateGrants(value) { grants = value; await cache.refresh(); },
+    async updateRoles(value) { catalogue = value; await cache.refresh(); }, updateProfile(value) { profile = { ...profile, ...value }; }, intercept(fn) { customFetch = fn; } };
 }

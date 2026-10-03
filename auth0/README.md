@@ -2,7 +2,9 @@
 
 Auth0 的本站应用 `eastmoney` 使用自定义登录域 `auth.hasbai.xyz`；管理 API 使用原租户域 `hasbai.eu.auth0.com`。Gateway 拥有 `/auth/login`、`/auth/callback` 和退出流程，Auth0 API audience 为 `https://eastmoney.hasbai.xyz/`。API 不接受 ID token 或 Cloudflare Access JWT。
 
-`actions/eastmoney-login.cjs` 保留 18.cn、迁移账号邮箱绑定、未验证邮箱提示与禁止旧事务 continue 的规则；向 API token 添加 `user` 对象，包含 `roles`、`profile`、`email`；Gateway 使用 Auth0 原始签名 token，并通过 `user.email` 核对回调身份。`sub` 使用 Auth0 原生主键。
+当前 post-login 绑定为注册资料 Action 和 `login claims`（`35884b07-e1f4-4ab8-b66c-0325d5a055e4`）。后者添加顶层 `username`、`email`、`role` 字符串、`_roles` 角色名称数组，以及本站组织可选的 `department`、`picture`；拒绝封禁账号和未验证邮箱。`role` 供数据库使用，不用于 Gateway 业务授权；`_roles` 在 Gateway 按组织权限缓存解析为角色 ID。Gateway 使用 Auth0 原始签名 token，通过归一化邮箱核对回调身份，`sub` 使用 Auth0 原生主键。
+
+`actions/eastmoney-login.cjs` 和 `scripts/publish-login-claims.mjs` 保留旧 nested `user` 协议的历史实现；不要重新发布或恢复旧绑定。旧 token 继续按原声明及有效期验证。基础角色由 Auth0 成员关系管理，当前 Action 不自动分配。
 
 其余注册 Action、中文主题、Hosted Form 与提示文案保留原业务流程。`eastmoney-signup-profile` 仍只处理新账号 pending 标记；姓名和部门不会授予权限或自动关联业务负责人。
 
@@ -26,7 +28,7 @@ Quant 旧机器应用 `eastmoney quant gateway` 已退役；Gateway 的机器客
 
 ## 统一 Gateway M2M
 
-`eastmoney gateway management` 复用原 Gateway identity management 的 client ID 和 Secret，声明为 `gateway-management-client.yaml`。Gateway 的 `AUTH0_MANAGEMENT_*`、登录 Action 的 `ROLES_CLIENT_*`、注册资料 Action 的 `PROFILE_CLIENT_*` 使用同一凭据。Secret 名保留以兼容现有 Action；Secret 值不写入声明文件。
+`eastmoney gateway management` 复用原 Gateway identity management 的 client ID 和 Secret，声明为 `gateway-management-client.yaml`。Gateway 的 `AUTH0_MANAGEMENT_*` 与注册资料 Action 的 `PROFILE_CLIENT_*` 使用同一凭据；历史登录 Action 的 `ROLES_CLIENT_*` 已不在当前登录链路。Secret 名保留以兼容现有 Action；Secret 值不写入声明文件。
 
 以下是已完成的历史合并流程，依赖当时的 Deploy CLI 机器凭据，不是新的租户管理入口；不得用它重新导入旧快照（当时在 Gateway 工作树运行，根 `.env` 通过 `AUTH_TEST_ENV_FILE` 指定）：
 
@@ -36,6 +38,6 @@ Quant 旧机器应用 `eastmoney quant gateway` 已退役；Gateway 的机器客
 4. 运行 `node --use-env-proxy scripts/verify-management-client.mjs`。它使用 test@18.cn 和统一凭据读取目录，并用线上 Action 代码调用真实管理 API：重复授予已有基础角色、按原值保存姓名部门，回读确认资料和角色不变。该验证不是完整 Hosted Form 提交。随后运行 `pnpm auth:verify -- --refresh-permissions` 验证真实 HTTP 登录和 Gateway 权限。
 5. `consolidate-management-clients.mjs disable` 检查验证证据；对 `.auth0-deploy/m2m/disable.yaml` 执行显式 clients/clientGrants plan/apply。停用后运行 `verify-management-client.mjs --retired`，确认旧应用 token 被拒绝、新会话真实登录正常；全部通过才运行 `consolidate-management-clients.mjs delete` 预览并加 `--apply` 删除这两个精确 ID。全租户删除开关始终关闭。
 
-`prepare-organization-migration.mjs` 保留历史实现但入口已退役，运行会在生成配置前终止，防止迁移前快照重新创建旧应用。当前 RBAC 和登录发布脚本只引用统一应用。Dashboard 的旧注册发布入口退役，后续注册资料配置归 Gateway 管理。
+`prepare-organization-migration.mjs` 保留历史实现但入口已退役，运行会在生成配置前终止，防止迁移前快照重新创建旧应用。当前 RBAC 工具引用统一应用；旧登录发布脚本属于历史实现。Dashboard 的旧注册发布入口退役，后续注册资料配置归 Gateway 管理。
 
 旧应用删除前可按快照恢复其 grant_types/scopes 并回切两个 Action；删除后旧 client ID 无法恢复，应修复统一应用或重新创建凭据并同步 Action。已经签发的旧管理 token 按其原有效期自然失效。

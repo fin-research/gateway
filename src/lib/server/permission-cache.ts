@@ -49,14 +49,18 @@ export class PermissionCacheStore {
   }
   async permissions(roles: Array<string | { id: string; name: string }>) {
     const snapshot = await this.snapshot();
-    const roleIds = roles.map(role => typeof role === 'string' ? role : role.id);
-    const creditMaintainer = roles.some(role => typeof role !== 'string' &&
-      (role.name === 'credit' || role.name === 'admin') &&
-      snapshot.roles.some(current => current.id === role.id && current.name === role.name));
-    const permissions = [...new Set(roleIds.flatMap(id => snapshot.configurations[id]?.permissions ?? [])
-      .filter(isPermissionCode).filter(code => code !== 'credit.institution:update' || creditMaintainer))].sort();
-    return { permissions, updatedAt: snapshot.updatedAt };
+    return permissionsFromSnapshot(snapshot, roles);
   }
+}
+
+export function permissionsFromSnapshot(snapshot: PermissionSnapshot, roles: Array<string | { id: string; name: string }>) {
+  const roleIds = roles.map(role => typeof role === 'string' ? role : role.id);
+  const creditMaintainer = roles.some(role => typeof role !== 'string' &&
+    (role.name === 'credit' || role.name === 'admin') &&
+    snapshot.roles.some(current => current.id === role.id && current.name === role.name));
+  const permissions = [...new Set(roleIds.flatMap(id => snapshot.configurations[id]?.permissions ?? [])
+    .filter(isPermissionCode).filter(code => code !== 'credit.institution:update' || creditMaintainer))].sort();
+  return { permissions, updatedAt: snapshot.updatedAt };
 }
 
 export function permissionCache(env: Env) {
