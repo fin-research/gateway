@@ -20,7 +20,7 @@ Quant 旧机器应用 `eastmoney quant gateway` 已退役；Gateway 的机器客
 
 Gateway 不再保存或消费 `__Host-eastmoney_session`，不再提供 `/auth/session`。`/auth/permissions` 返回有效权限和缓存时间；姓名、邮箱、部门、头像及 `_roles` 展示从当前 JWT 解析。旧 Cookie 仅在后续响应清理，不能创建登录身份。
 
-切换需先通过 Dashboard 构建、Gateway 检查和真实 handler 集成，先部署已验证 Gateway 和已合并 Dashboard，再精确更新 Auth0 客户端公开 SPA 配置并回读，运行公开客户端 PKCE 的 HTTP Bearer 登录验收。不得重放旧 Action 或全租户导出。
+切换需先通过 Dashboard 构建、Gateway 检查和真实 handler 集成，先部署已合并 Dashboard 并核对线上版本及 CSR 页面，再部署已验证 Gateway，最后精确更新 Auth0 客户端公开 SPA 配置并回读，运行公开客户端 PKCE 的 HTTP Bearer 登录验收。若需回退，先恢复 Gateway 的保护边界，再回退 Dashboard。不得重放旧 Action 或全租户导出。
 
 ## Eastmoney 组织隔离
 
