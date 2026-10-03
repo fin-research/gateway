@@ -13,7 +13,10 @@ export function canonicalPath(request: Request): string {
 }
 
 export function dashboardRoute(request: Request): string | null {
-  return matchDashboardRoute(canonicalPath(request));
+  const path = canonicalPath(request);
+  // The Quant research document is a read-only part of the existing model page.
+  if (path === '/financing-model/research') return '/financing-model';
+  return matchDashboardRoute(path);
 }
 export function dashboardPolicy(request: Request) { return requestPolicy(request, dashboardRoute(request)); }
 

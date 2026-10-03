@@ -35,6 +35,11 @@
   },
   "services": [
     {
+      "binding": "QUANT_REPORT",
+      "service": "quant",
+      "entrypoint": "ResearchReport"
+    },
+    {
       "binding": "DASHBOARD",
       "service": "eastmoney-dashboard",
       "entrypoint": "GatewayDashboard"

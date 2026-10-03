@@ -52,7 +52,10 @@ app.all('*', async c => {
       if (!request.headers.get('Content-Type')?.includes('application/json')) throw new ProfileError(415, '请提交 JSON 格式的人员资料');
       return Response.json(await createDirectory(env).updatePerson(await readProfileJson(request, 4096)), { headers });
     }
-    const response = await env.DASHBOARD.fetch(forwardedRequest(request, { version: 1, user, choice: { status: 401 } }));
+    const forwarded = forwardedRequest(request, { version: 1, user, choice: { status: 401 } });
+    const response = path === '/financing-model/research'
+      ? await env.QUANT_REPORT.fetch(new Request(new URL('/REPORT.html', request.url), forwarded))
+      : await env.DASHBOARD.fetch(forwarded);
     if (response.status === 101) return response;
     const result = new Response(response.body, response);
     if (user) {
