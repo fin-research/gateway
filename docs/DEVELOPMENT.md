@@ -7,7 +7,7 @@ Gateway 是独立 Hono Worker。用户、角色与成员关系属于 Auth0；JWT
 ## 代码与契约
 
 - `src/app.ts`：Hono 路由、公开/保护分流、SvelteKit 数据请求错误协议。
-- `src/tokens.ts` / `session.ts`：固定 Auth0 JWKS、RS256/issuer/audience/azp/时效、PKCE/state/nonce、浏览器 Bearer token、退役 Cookie 清理。
+- `src/tokens.ts` / `session.ts`：固定 Auth0 JWKS、RS256/issuer/audience/azp/时效、浏览器 Bearer token、退役 Cookie 清理。
 - `src/lib/server/authorization.ts`：JWT 角色快照与正常权限检查；授权 JSON 缓存见 `permission-cache.ts`。
 - `src/lib/permissions.ts` / `route-permissions.ts` / `server/permission-policy.ts`：唯一权限目录及路由策略。前两份通过 `scripts/sync-dashboard-contracts.mjs` 同步到 Dashboard 供菜单与导航使用。
 - `src/identity-service.ts`：私有 `IdentityService`，账号目录、MCP 业务调用路由授权桥接与角色配置；保留原人员编辑私有入口供旧版本过渡。公网 `/api/management/people` 由 Gateway 直接处理管理员姓名、部门读取和写入，不经过 Dashboard。
@@ -36,7 +36,7 @@ Worker 运行时仅需要 `AUTH0_MANAGEMENT_CLIENT_SECRET`；旧 `AUTH0_CLIENT_S
 
 生产公开 origin、Auth0 issuer/API audience、用户 client ID 和机器 client ID allowlist 均在 Wrangler vars。Quant 机器应用退役后 allowlist 为空；重新开放机器访问须另行审查 client、scope 和调用链。JWT 保存登录时的角色 ID/名称与资料，不含应用有效权限快照；每个受保护请求按 JWT 角色读取缓存授权并检查路由权限，只有 `enforce` 模式可用。角色成员变更在重新登录或个人资料页“刷新登录角色”取得新 token 后生效。
 
-公开首页保留匿名访问。若请求带有效本站会话，Gateway 同请求解析当前角色授权并把展示快照交给 Dashboard SSR，使入口卡片在首屏按权限呈现；身份或权限读取失败时以匿名首页继续，不向页面传递部分授权。带 Bearer 的首页响应为 private/no-store；浏览器首屏不依赖服务端登录快照。
+公开首页保留匿名访问，账号与入口可见性由客户端 JWT 展示和 `/auth/permissions` 结果初始化。Dashboard 根 layout 不再从 SSR 注入登录快照。Gateway 对显式带 Bearer 的首页仍验签和检查当前授权；读取失败以匿名首页继续，不向后端传递部分授权。
 
 ## 浏览器 Bearer 登录
 
