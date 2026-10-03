@@ -51,6 +51,7 @@ export const ACCESS_PROBES = [
 
 function denied(response) {
   if ([401, 403].includes(response.status)) return true;
+  if (response.status === 200) { try { return JSON.parse(response.text).type === 'redirect'; } catch {} }
   if (![302, 303].includes(response.status)) return false;
   const location = response.headers.get('location');
   if (!location) return false;
@@ -63,9 +64,9 @@ async function main() {
   const config = await readAuthTestConfig();
   const anonymous = createHttpSession();
   const failures = [];
-  const probes = process.argv.includes('--mcp-only') ? [] : ACCESS_PROBES;
+  const probes = process.argv.includes('--mcp-only') ? [] : ACCESS_PROBES.map(([scope,path,status]) => [scope, scope !== 'public' && !path.startsWith('/api/') && !path.startsWith('/data/') && !path.startsWith('/auth/') ? path + '/__data.json' : path, status]);
   for (const [scope, path, expected] of probes) {
-    const response = await anonymous.request(SITE_ORIGIN + path, { headers: { Accept: path.startsWith('/api/') || path.startsWith('/data/') ? 'application/json' : 'text/html' }, followRedirects: false });
+    const response = await anonymous.request(SITE_ORIGIN + path, { headers: { Accept: path.endsWith('/__data.json') || path.startsWith('/api/') || path.startsWith('/data/') ? 'application/json' : 'text/html' }, followRedirects: false });
     const passed = scope === 'public' ? expected.includes(response.status) : denied(response);
     console.log(JSON.stringify({ identity: 'anonymous', scope, path: new URL(path, SITE_ORIGIN).pathname, status: response.status, passed }));
     if (!passed) failures.push(`anonymous ${scope}`);
@@ -74,7 +75,7 @@ async function main() {
   const permissions = new Set((session.profile.permissions ?? []).map(item => item.name));
   for (const [scope, path, expected] of probes) {
     await pause(1500);
-    const response = await session.request(SITE_ORIGIN + path, { headers: { Accept: path.startsWith('/api/') || path.startsWith('/data/') ? 'application/json' : 'text/html' }, followRedirects: false });
+    const response = await session.request(SITE_ORIGIN + path, { headers: { Accept: path.endsWith('/__data.json') || path.startsWith('/api/') || path.startsWith('/data/') ? 'application/json' : 'text/html' }, followRedirects: false });
     const permitted = ['public', 'login'].includes(scope) || permissions.has(scope);
     const passed = permitted ? expected.includes(response.status) : response.status === 403;
     let failureDetail;
@@ -88,13 +89,13 @@ async function main() {
   if (process.argv.includes('--refresh-permissions')) {
     const response = await fetch(SITE_ORIGIN + '/auth/permissions/refresh', {
       method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(60000),
-      headers: { Origin: SITE_ORIGIN, Cookie: session.cookies.header(SITE_ORIGIN + '/auth/permissions/refresh') },
+      headers: { Origin: SITE_ORIGIN, ...session.bearerHeaders() },
     });
     const result = JSON.parse(await boundedText(response));
     if (response.status !== 403) failures.push('ordinary user must not refresh shared permission cache');
     const own = await session.request(SITE_ORIGIN + '/auth/permissions', { followRedirects: false });
     const snapshot = JSON.parse(own.text);
-    const hasBaseline = snapshot.roles?.some(role => role.name === 'authenticated');
+    const hasBaseline = session.claims._roles.includes('authenticated');
     if (own.status !== 200 || !hasBaseline || snapshot.permissions?.length !== permissions.size) failures.push('cached permission snapshot');
     console.log(JSON.stringify({ permissionCacheRefresh: response.status, ownPermissions: snapshot.permissions?.length,
       authenticatedRole: hasBaseline, cacheUpdatedAt: snapshot.updatedAt }));
@@ -105,7 +106,7 @@ async function main() {
       // Keep login form submission restricted to Auth0. Only this fixed pair of
       // read-only MCP endpoints receives JSON and the already verified site cookie.
       const response = await fetch(SITE_ORIGIN + path, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(60000),
-        headers: { Origin: SITE_ORIGIN, Cookie: session.cookies.header(SITE_ORIGIN + path), Accept: 'application/json, text/event-stream', 'Content-Type': 'application/json' },
+        headers: { Origin: SITE_ORIGIN, ...session.bearerHeaders(), Accept: 'application/json, text/event-stream', 'Content-Type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }),
       });
       const payload = JSON.parse(await boundedText(response));

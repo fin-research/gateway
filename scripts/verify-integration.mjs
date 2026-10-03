@@ -7,9 +7,8 @@ import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { fixture } from '../tests/helpers/fixture.mjs';
 import { gatewayRequest } from '../src/app.ts';
-import { SESSION_COOKIE } from '../src/session.ts';
 import { identityService } from '../src/identity-service.ts';
-import { PUBLIC_DATA_RESOURCES } from '../src/policy.ts';
+import { CLIENT_PAGE_ROUTES } from '../src/policy.ts';
 const dashboard = resolve(process.env.DASHBOARD_CHECKOUT || '../dashboard');
 const data = resolve(process.env.DATA_CHECKOUT || '../data');
 const { Server } = await import(pathToFileURL(join(dashboard, '.svelte-kit/output/server/index.js')).href);
@@ -56,17 +55,28 @@ try {
     return server.respond(new Request(request, { headers }), { getClientAddress: () => '127.0.0.1', platform: { env: { ...appEnv, GATEWAY_CONTEXT: context }, context: { waitUntil() {} } } });
   } };
   f.env.DATA = { fetch: request => handleGatewayRequest(request, {}) };
-  const flat = process.argv.includes('--flat-claims');
-  const token = await f.signed(flat ? { user: undefined, ...f.flatClaims } : {});
-  const adminToken = await f.signed(flat ? { user: undefined, ...f.flatClaims, _roles: ['admin'] }
-    : { user: { ...f.userClaims, roles: [{ id: 'rol_TestAdmin', name: 'admin' }] } });
+  const token = await f.signed();
+  const adminToken = await f.signed({ _roles: ['admin'] });
   const respond = (path, authenticated = true, init = {}) => gatewayRequest(f.request(path, {
-    ...init, headers: { ...(authenticated ? { Cookie: SESSION_COOKIE + '=' + token } : {}), ...init.headers },
+    ...init, headers: { ...(authenticated ? { Authorization: 'Bearer ' + token } : {}), ...init.headers },
   }), f.env);
   const payload = async path => { const response = await respond(path); assert.equal(response.status, 200, path); return response.json(); };
+  for (const id of CLIENT_PAGE_ROUTES) {
+    const route = manifest._.routes.find(route => route.id === id);
+    assert.ok(route?.page, 'Shell route must be a real SvelteKit page: ' + id);
+    const nodes = [...route.page.layouts.filter(index => index !== undefined), route.page.leaf];
+    let ssr = true;
+    for (const index of nodes) {
+      const node = await manifest._.nodes[index]();
+      if (node.universal?.ssr !== undefined) ssr = node.universal.ssr;
+      if (node.server?.ssr !== undefined) ssr = node.server.ssr;
+    }
+    assert.equal(ssr, false, 'Anonymous shell must disable server rendering: ' + id);
+    checks++;
+  }
   const bootstrap = await payload('/trading-research/research/__data.json?x-sveltekit-invalidated=11');
-  assert.equal(bootstrap.type, 'data'); assert.deepEqual(bootstrap.nodes[0].uses.dependencies, ['site:session']);
-  assert.ok(!bootstrap.nodes[0].uses.url); checks++;
+  assert.equal(bootstrap.type, 'data'); assert.ok(!bootstrap.nodes[0].uses?.dependencies?.includes('site:session'));
+  assert.ok(!bootstrap.nodes[0].uses?.url); checks++;
   for (const path of ['/trading-research/market-hotspots', '/trading-research/policy-tracking', '/credit-workbench/calendar']) {
     const result = await payload(path + '/__data.json?x-sveltekit-invalidated=01');
     assert.equal(result.nodes[0].type, 'skip'); checks++;
@@ -75,12 +85,11 @@ try {
     { type: 'redirect', location: '/management/me' }); checks++;
   for (const path of ['/profile', '/trading-research', '/credit-workbench']) {
     const response = await respond(path, false, { headers: { Accept: 'text/html' } });
-    assert.equal(response.status, 303); checks++;
+    assert.equal(response.status, 200); assert.doesNotMatch(await response.text(), /测试账号|test@18.cn/); checks++;
     const dataResponse = await respond(path + '/__data.json', false);
     assert.deepEqual(await dataResponse.json(), { type: 'redirect', location: '/auth/login?returnTo=' + encodeURIComponent(path) }); checks++;
     const signed = await respond(path);
-    assert.equal(signed.status, path === '/profile' ? 303 : 200, path);
-    if (path === '/profile') assert.equal(signed.headers.get('location'), '/management/me');
+    assert.equal(signed.status, 200, path);
     checks++;
   }
   const notice = await respond('/auth/verify-email?state=opaque&email=must-not-render%4018.cn', false);
@@ -106,11 +115,11 @@ try {
   assert.equal((await respond('/management/me/__data.json')).status, 200); checks++;
   f.updateProfile({ blocked: false, email: 'changed@18.cn' });
   assert.equal((await (await respond('/management/me/__data.json')).json()).type, 'data'); checks++;
-  const adminHeaders = { Cookie: SESSION_COOKIE + '=' + adminToken };
+  const adminHeaders = { Authorization: 'Bearer ' + adminToken };
   let beforeDirectory = identityPaths.length;
   const peoplePage = await respond('/management/people', true, { headers: { ...adminHeaders, Accept: 'text/html' } });
   assert.equal(peoplePage.status, 200);
-  assert.match(await peoplePage.text(), /人员资料/);
+  assert.doesNotMatch(await peoplePage.text(), /旧姓名|member@18.cn/);
   assert.deepEqual(identityPaths.slice(beforeDirectory), []); checks++;
   const peopleResponse = await respond('/api/management/people', true, { headers: adminHeaders });
   assert.equal(peopleResponse.status, 200);
@@ -121,8 +130,10 @@ try {
   beforeDirectory = identityPaths.length;
   const rolesPage = await respond('/management/people?tab=roles', true, { headers: { ...adminHeaders, Accept: 'text/html' } });
   assert.equal(rolesPage.status, 200);
-  assert.match(await rolesPage.text(), /刷新授权缓存/);
-  assert.deepEqual(identityPaths.slice(beforeDirectory), ['/roles/configurations']); checks++;
+  assert.doesNotMatch(await rolesPage.text(), /rol_TestAdmin/);
+  assert.deepEqual(identityPaths.slice(beforeDirectory), []); checks++;
+  const rolesData = await respond('/management/people/__data.json?tab=roles', true, { headers: adminHeaders });
+  assert.equal(rolesData.status, 200); assert.deepEqual(identityPaths.slice(beforeDirectory), ['/roles/configurations']); checks++;
   const change = { id: 'auth0|member', name: '新姓名', department: '新部门' };
   const personResponse = await respond('/api/management/people', true, { method: 'POST',
     headers: { ...adminHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify(change) });
@@ -134,5 +145,5 @@ try {
     headers: { ...adminHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...change, id: 'auth0|foreign' }) });
   assert.equal(foreignResponse.status, 403);
   assert.equal(personnelPatch, undefined); checks++;
-  console.log(JSON.stringify({ integration: true, claims: flat ? 'flat' : 'legacy', checks, gateway: 'Hono', dashboard: 'built SvelteKit', data: 'bundled real handler', externalServices: 'mocked', browserUsed: false }));
+  console.log(JSON.stringify({ integration: true, claims: 'flat', checks, gateway: 'Hono', dashboard: 'built SvelteKit', data: 'bundled real handler', externalServices: 'mocked', browserUsed: false }));
 } finally { for (const fn of cleanup) fn(); await rm(directory, { recursive: true, force: true }); }

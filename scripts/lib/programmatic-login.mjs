@@ -1,3 +1,5 @@
+import { createRemoteJWKSet, customFetch, base64url } from 'jose';
+import { verifyToken, userClaims } from '../../src/tokens.ts';
 import { readFile } from 'node:fs/promises';
 import { parseEnv } from 'node:util';
 
@@ -55,7 +57,6 @@ export class SessionCookies {
       && (!c.secure || url.protocol === 'https:'))
       .sort((a, b) => b.path.length - a.path.length).map(c => `${c.name}=${c.value}`).join('; ');
   }
-  hasSiteSession() { return /(?:^|; )__Host-eastmoney_session=/.test(this.header(SITE_ORIGIN + '/')); }
 }
 
 function decode(value) {
@@ -94,10 +95,12 @@ export async function boundedText(response) {
 
 export function createHttpSession(fetcher = fetch) {
   const cookies = new SessionCookies();
+  let token;
   async function request(target, options = {}) {
     let url = checkedUrl(target); let method = options.method ?? 'GET'; let body = options.body;
     for (let hop = 0; hop < 16; hop++) {
       const headers = new Headers({ Accept: 'text/html', 'User-Agent': 'Eastmoney-Authorization-Test/1.0', ...options.headers });
+      if (token && url.origin === SITE_ORIGIN) headers.set('Authorization', 'Bearer ' + token);
       const cookie = cookies.header(url); if (cookie) headers.set('Cookie', cookie);
       if (body !== undefined) {
         if (url.origin !== LOGIN_ORIGIN || method !== 'POST') fail('CREDENTIAL_DESTINATION', 'Login form submissions are restricted to the Auth0 login origin');
@@ -111,26 +114,57 @@ export function createHttpSession(fetcher = fetch) {
       if (options.followRedirects !== false && response.status >= 300 && response.status < 400 && location) {
         const next = checkedUrl(location, url);
         if (body !== undefined && [307, 308].includes(response.status)) { await response.body?.cancel(); fail('POST_REDIRECT', 'Refusing to replay credentials across a redirect'); }
-        await response.body?.cancel(); url = next; method = 'GET'; body = undefined; continue;
+        await response.body?.cancel();
+        if (options.stopAtCallback && next.origin === SITE_ORIGIN && next.pathname === '/auth/callback') return { url: next, status: response.status, headers: response.headers, text: '' };
+        url = next; method = 'GET'; body = undefined; continue;
       }
       return { url, status: response.status, headers: response.headers, text: await boundedText(response) };
     }
     fail('REDIRECT_LIMIT', 'Login redirect limit exceeded');
   }
-  return { cookies, request };
+  return { cookies, request, setAccessToken(value) { token = value; }, bearerHeaders() { return token ? { Authorization: 'Bearer ' + token } : {}; } };
 }
 
 export async function loginTestAccount(config, fetcher = fetch) {
   if (config.email !== 'test@18.cn' || !config.password) fail('TEST_ACCOUNT_REQUIRED', 'Only the configured test account can run this verification');
   const session = createHttpSession(fetcher);
-  let response = await session.request(SITE_ORIGIN + '/auth/login?returnTo=%2Fprofile');
+  const clientId = '16vMxoYpr5AdPRiW1PkwIiHuRWszii6m';
+  const state = base64url.encode(crypto.getRandomValues(new Uint8Array(32)));
+  const nonce = base64url.encode(crypto.getRandomValues(new Uint8Array(32)));
+  const verifier = base64url.encode(crypto.getRandomValues(new Uint8Array(32)));
+  const challenge = base64url.encode(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
+  const env = { AUTH0_LOGIN_DOMAIN: 'auth.hasbai.xyz', AUTH0_AUDIENCE: 'https://eastmoney.hasbai.xyz/',
+    AUTH0_CLIENT_ID: clientId, AUTH0_ORGANIZATION_ID: 'org_6yvoRRCkzk3eGkBS', AUTH0_MACHINE_CLIENT_IDS: '' };
+  const authorize = new URL('/authorize', LOGIN_ORIGIN);
+  authorize.search = new URLSearchParams({ client_id: clientId, response_type: 'code', redirect_uri: SITE_ORIGIN + '/auth/callback',
+    audience: env.AUTH0_AUDIENCE, organization: env.AUTH0_ORGANIZATION_ID, scope: 'openid profile email',
+    state, nonce, code_challenge: challenge, code_challenge_method: 'S256' }).toString();
+  let response = await session.request(authorize, { stopAtCallback: true });
   let identifierSent = false; let passwordSent = false;
   for (let step = 0; step < 6; step++) {
-    if (response.url.origin === SITE_ORIGIN && session.cookies.hasSiteSession()) {
+    if (response.url.origin === SITE_ORIGIN && response.url.pathname === '/auth/callback') {
+      const params = response.url.searchParams;
+      if (params.getAll('state').length !== 1 || params.get('state') !== state || params.getAll('code').length !== 1 || params.has('error'))
+        fail('CALLBACK_INVALID', 'Auth0 callback failed state/code validation');
+      const exchange = await session.request(LOGIN_ORIGIN + '/oauth/token', { method: 'POST', followRedirects: false,
+        body: new URLSearchParams({ grant_type: 'authorization_code', client_id: clientId, redirect_uri: SITE_ORIGIN + '/auth/callback',
+          code: params.get('code'), code_verifier: verifier }).toString() });
+      if (exchange.status !== 200) fail('TOKEN_EXCHANGE_FAILED', `Public PKCE exchange failed (HTTP ${exchange.status})`);
+      let tokens;
+      try { tokens = JSON.parse(exchange.text); } catch { fail('TOKEN_EXCHANGE_FAILED', 'Invalid token response'); }
+      if (tokens.token_type !== 'Bearer' || typeof tokens.access_token !== 'string' || typeof tokens.id_token !== 'string')
+        fail('TOKEN_EXCHANGE_FAILED', 'Missing Auth0 tokens');
+      const keys = createRemoteJWKSet(new URL('/.well-known/jwks.json', LOGIN_ORIGIN), { [customFetch]: fetcher });
+      const [access, id] = await Promise.all([verifyToken(tokens.access_token, env, 'access', keys), verifyToken(tokens.id_token, env, 'id', keys)]);
+      const claims = userClaims(access);
+      if (id.nonce !== nonce || id.sub !== access.sub || access.azp !== clientId || claims.email !== config.email || id.email !== config.email)
+        fail('IDENTITY_NOT_CONFIRMED', 'Signed identity does not match PKCE login');
+      session.setAccessToken(tokens.access_token);
       const identity = await session.request(SITE_ORIGIN + '/api/profile', { headers: { Accept: 'application/json' }, followRedirects: false });
       let profile; try { profile = JSON.parse(identity.text); } catch { /* handled below */ }
-      if (identity.status !== 200 || profile?.email !== config.email || profile?.emailVerified !== true) fail('IDENTITY_NOT_CONFIRMED', 'Login completed without a confirmed test-account profile');
-      return { ...session, profile };
+      if (identity.status !== 200 || profile?.email !== config.email || profile?.emailVerified !== true)
+        fail('IDENTITY_NOT_CONFIRMED', 'Login completed without a confirmed test-account profile');
+      return { ...session, profile, claims };
     }
     if (response.status !== 200) fail('LOGIN_REJECTED', `Login was rejected at ${response.url.hostname}${response.url.pathname} (HTTP ${response.status})`);
     if (response.url.pathname.startsWith('/u/custom-prompt/')) fail('PROFILE_REQUIRED', 'The test account must complete its required Auth0 name/department form before Gateway can issue a session');
@@ -152,7 +186,7 @@ export async function loginTestAccount(config, fetcher = fetch) {
       identifierSent = true;
     }
     values.set('username', config.email);
-    response = await session.request(target, { method: 'POST', body: values.toString() });
+    response = await session.request(target, { method: 'POST', body: values.toString(), stopAtCallback: true });
   }
   fail('LOGIN_STEP_LIMIT', 'Login step limit exceeded');
 }

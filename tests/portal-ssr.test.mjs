@@ -14,7 +14,7 @@ test('public portal forwards only verified effective permissions into SSR', asyn
   assert.equal(context().user, null);
 
   const token = await f.signed();
-  const signed = await gatewayRequest(f.request('/', { headers: { Cookie: `${SESSION_COOKIE}=${token}` } }), f.env);
+  const signed = await gatewayRequest(f.request('/', { token }), f.env);
   assert.equal(signed.status, 200);
   assert.equal(signed.headers.get('Cache-Control'), 'no-store, private');
   assert.equal(context().user.auth0Id, 'auth0|test');
@@ -26,8 +26,8 @@ test('public portal forwards only verified effective permissions into SSR', asyn
   assert.equal(context().user, null);
 
   f.env.AUTHORIZATION_MODE = 'invalid';
-  const unavailable = await gatewayRequest(f.request('/', { headers: { Cookie: `${SESSION_COOKIE}=${token}` } }), f.env);
+  const unavailable = await gatewayRequest(f.request('/', { token }), f.env);
   assert.equal(unavailable.status, 200);
   assert.equal(context().user, null);
-  assert.equal((await gatewayRequest(f.request('/management/me', { headers: { Cookie: `${SESSION_COOKIE}=${token}` } }), f.env)).status, 503);
+  assert.equal((await gatewayRequest(f.request('/management/me', { token }), f.env)).status, 503);
 });

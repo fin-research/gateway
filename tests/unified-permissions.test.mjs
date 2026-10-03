@@ -39,11 +39,11 @@ test('signed roles use current cached grants, never token permissions or databas
   await f.updateGrants([]);
   await assert.rejects(authorizeRequest(req,f.env,'/financing/projects'),{status:403});
   await f.updateGrants(['financing.project:read']);
-  for(const roles of [[],[{id:'rol_Unknown',name:'unknown'}]]) {
-    await assert.rejects(authorizeRequest(f.request('/financing/projects',{token:await f.signed({user:{...f.userClaims,roles}})}),f.env,'/financing/projects'),{status:403});
+  for(const roles of [[]]) {
+    await assert.rejects(authorizeRequest(f.request('/financing/projects',{token:await f.signed({_roles:roles})}),f.env,'/financing/projects'),{status:403});
   }
-  for(const roles of [undefined,['admin'],[{id:'invalid',name:'bad'}],[{id:'rol_A',name:'A'},{id:'rol_A',name:'A'}]]) {
-    await assert.rejects(authorizeRequest(f.request('/financing/projects',{token:await f.signed({user:{...f.userClaims,roles}})}),f.env,'/financing/projects'),{status:401});
+  for(const roles of [undefined,['unknown'],[{id:'invalid',name:'bad'}],['authenticated','authenticated']]) {
+    await assert.rejects(authorizeRequest(f.request('/financing/projects',{token:await f.signed({_roles:roles})}),f.env,'/financing/projects'),{status:401});
   }
   f.env.AUTHORIZATION_MODE='beta-open';
   await assert.rejects(authorizeRequest(req,f.env,'/financing/projects'),{status:503});

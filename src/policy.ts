@@ -32,3 +32,20 @@ export function publicDataRead(request: Request): boolean {
 export function requireSameOrigin(request: Request): void {
   if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && request.headers.get('Origin') !== new URL(request.url).origin) throw new AccessError(403, '仅允许从本站提交操作');
 }
+
+/** Exact CSR +page IDs: anonymous HTML contains only a shell, never business load data. */
+export const CLIENT_PAGE_ROUTES = new Set([
+  '/articles/[id]', '/bond', '/commentaries/[id]', '/credit-assistant', '/credit-workbench/[[view]]',
+  '/financing', '/financing/bond-investors', '/financing/clients', '/financing/data', '/financing/debts/[id]',
+  '/financing/liability-report', '/financing/projects', '/financing/projects/[id]',
+  '/financing/sop', '/financing/sop/[id]', '/financing/sop/reminders', '/financing-model', '/fund-report',
+  '/management', '/management/me', '/management/messenger', '/management/notifications', '/management/people',
+  '/management/permissions', '/market-hotspots', '/news/[id]', '/policy-tracking', '/profile',
+  '/secondary-bond-pool', '/trading-research', '/trading-research/[view]',
+]);
+export function clientPageShell(request: Request, routeId: string | null): boolean {
+  const path = new URL(request.url).pathname;
+  return ['GET', 'HEAD'].includes(request.method) && request.headers.get('Accept')?.includes('text/html') === true
+    && !path.replace(/\/$/, '').endsWith('/__data.json') && canonicalPath(request) !== '/financing-model/research'
+    && routeId !== null && CLIENT_PAGE_ROUTES.has(routeId);
+}

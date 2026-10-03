@@ -19,11 +19,11 @@ test('legacy broad scopes cannot access admin backend',async t=>{
 
 test('signed admin role grants full site permissions and backend access',async t=>{
  const f=await fixture(t);await f.updateGrants([]);
- const token=await f.signed({user:{...f.userClaims,roles:[{id:'rol_TestAdmin',name:'admin'}]}});
+ const token=await f.signed({_roles:['admin']});
  const result=await authorizeRequest(f.request('/management/people',{token}),f.env,'/management/people');
  assert.ok(result.permissions.includes('financing.project:delete'));
- const forged=await f.signed({user:{...f.userClaims,roles:[{id:'rol_Unregistered',name:'admin'}]}});
- await assert.rejects(authorizeRequest(f.request('/management/people',{token:forged}),f.env,'/management/people'),{status:403});
+ const forged=await f.signed({_roles:['unregistered']});
+ await assert.rejects(authorizeRequest(f.request('/management/people',{token:forged}),f.env,'/management/people'),{status:401});
 });
 
 test('test message actions require signed admin and reject broad business scopes',async t=>{
@@ -32,6 +32,6 @@ test('test message actions require signed admin and reject broad business scopes
  const request=token=>f.request('/management/messenger?/sendTest',{...options,token});
  assert.deepEqual(requestPolicy(request(await f.signed()),'/management/messenger'),{admin:true});
  await assert.rejects(authorizeRequest(request(await f.signed()),f.env,'/management/messenger'),{status:403});
- const token=await f.signed({user:{...f.userClaims,roles:[{id:'rol_TestAdmin',name:'admin'}]}});
+ const token=await f.signed({_roles:['admin']});
  await authorizeRequest(request(token),f.env,'/management/messenger');
 });

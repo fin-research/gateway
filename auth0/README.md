@@ -1,10 +1,10 @@
 # Auth0 配置
 
-Auth0 的本站应用 `eastmoney` 使用自定义登录域 `auth.hasbai.xyz`；管理 API 使用原租户域 `hasbai.eu.auth0.com`。Gateway 拥有 `/auth/login`、`/auth/callback` 和退出流程，Auth0 API audience 为 `https://eastmoney.hasbai.xyz/`。API 不接受 ID token 或 Cloudflare Access JWT。
+Auth0 的本站应用 `eastmoney` 使用自定义登录域 `auth.hasbai.xyz`；管理 API 使用原租户域 `hasbai.eu.auth0.com`。Dashboard 客户端拥有 `/auth/login`、`/auth/callback` 和退出页面，Auth0 SPA SDK 执行 PKCE，Gateway 只验签及授权，Auth0 API audience 为 `https://eastmoney.hasbai.xyz/`。API 不接受 ID token 或 Cloudflare Access JWT。
 
-当前 post-login 绑定为注册资料 Action 和 `login claims`（`35884b07-e1f4-4ab8-b66c-0325d5a055e4`）。后者添加顶层 `username`、`email`、`role` 字符串、`_roles` 角色名称数组，以及本站组织可选的 `department`、`picture`；拒绝封禁账号和未验证邮箱。`role` 供数据库使用，不用于 Gateway 业务授权；`_roles` 在 Gateway 按组织权限缓存解析为角色 ID。Gateway 使用 Auth0 原始签名 token，通过归一化邮箱核对回调身份，`sub` 使用 Auth0 原生主键。
+当前 post-login 绑定为注册资料 Action 和 `login claims`（`35884b07-e1f4-4ab8-b66c-0325d5a055e4`）。后者添加顶层 `username`、`email`、`role` 字符串、`_roles` 角色名称数组，以及本站组织可选的 `department`、`picture`；拒绝封禁账号和未验证邮箱。`role` 供数据库使用，不用于 Gateway 业务授权；`_roles` 在 Gateway 按组织权限缓存解析为角色 ID。Gateway 接收 `Authorization: Bearer` 中的 Auth0 原始签名 token，`sub` 使用 Auth0 原生主键。
 
-`actions/eastmoney-login.cjs` 和 `scripts/publish-login-claims.mjs` 保留旧 nested `user` 协议的历史实现；不要重新发布或恢复旧绑定。旧 token 继续按原声明及有效期验证。基础角色由 Auth0 成员关系管理，当前 Action 不自动分配。
+`actions/eastmoney-login.cjs` 和 `scripts/publish-login-claims.mjs` 保留旧 nested `user` 协议的历史实现；不要重新发布或恢复旧绑定。旧 nested `user` 和 URL namespace token 一律拒绝。基础角色由 Auth0 成员关系管理，当前 Action 不自动分配。
 
 其余注册 Action、中文主题、Hosted Form 与提示文案保留原业务流程。`eastmoney-signup-profile` 仍只处理新账号 pending 标记；姓名和部门不会授予权限或自动关联业务负责人。
 
@@ -14,13 +14,13 @@ Quant 旧机器应用 `eastmoney quant gateway` 已退役；Gateway 的机器客
 
 具体发布与回退见 [DEVELOPMENT](../docs/DEVELOPMENT.md)。
 
-## 登录时长与弹窗
+## SPA 登录与 token
 
-本站 API `https://eastmoney.hasbai.xyz/` 的 `token_lifetime`、`token_lifetime_for_web` 为 `86400` 秒；Gateway 会话最长 24 小时且不超过 Access Token 的有效期。既有 token/cookie 不追溯延长，下一次登录生效。该 API 的机器 token 使用同一个 lifetime 配置，机器访问范围与客户端白名单保持原边界。
+现有 `eastmoney` 客户端改为 `spa`、`token_endpoint_auth_method=none`，没有 M2M grant。保留本站 callback、logout URL、web origins、organization 和授权码 grant。Auth0 SPA SDK 负责 PKCE/state/nonce、弹窗与重定向登录，token 仅在浏览器内存中；刷新后尝试 Auth0 静默恢复，失败则重新登录。用户 token 时长由 API 配置控制，Gateway 依签名 `exp` 校验。
 
-`/auth/login?popup=<32–64 位随机 ID>` 将 popup ID 与 state、nonce、PKCE 一起写入加密事务。回调仅从已验证事务读取 ID；成功设置 HttpOnly Cookie，再输出无凭据的 HTML 完成通知。回调页面使用 nonce CSP、no-store 和 no-referrer，清除地址栏 OAuth 参数；父页校验消息后重新读取 `/auth/session`。普通直接访问的重定向登录流程继续可用。
+Gateway 不再保存或消费 `__Host-eastmoney_session`，不再提供 `/auth/session`。`/auth/permissions` 返回有效权限和缓存时间；姓名、邮箱、部门、头像及 `_roles` 展示从当前 JWT 解析。旧 Cookie 仅在后续响应清理，不能创建登录身份。
 
-令牌时长变更先用 Auth0 CLI 回读本站 API，只更新其两个 lifetime 字段，保留其他 API 原配置；执行后再次回读核验。
+切换需先通过 Dashboard 构建、Gateway 检查和真实 handler 集成，先部署已验证 Gateway 和已合并 Dashboard，再精确更新 Auth0 客户端公开 SPA 配置并回读，运行公开客户端 PKCE 的 HTTP Bearer 登录验收。不得重放旧 Action 或全租户导出。
 
 ## Eastmoney 组织隔离
 

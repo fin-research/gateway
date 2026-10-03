@@ -45,14 +45,14 @@ test('users read their cached permissions; only authorized same-origin users can
   await gatewayRequest(f.request('/auth/permissions',{token}),f.env);
   assert.equal(f.calls.auth0.length,before,'ordinary reads use cached JSON');
   assert.equal((await gatewayRequest(f.request('/auth/permissions/refresh',{token,method:'POST'}),f.env)).status,403);
-  const adminToken=await f.signed({user:{...f.userClaims,roles:[{id:'rol_TestAdmin',name:'admin'}]}});
+  const adminToken=await f.signed({_roles:['admin']});
   assert.equal((await gatewayRequest(f.request('/auth/permissions/refresh',{token:adminToken,method:'POST'}),f.env)).status,200);
   assert.equal((await gatewayRequest(f.request('/auth/permissions/refresh',{token,method:'POST',headers:{Origin:'https://evil.test'}}),f.env)).status,403);
   await f.updateGrants([]);
   assert.equal((await gatewayRequest(f.request('/auth/permissions',{token}),f.env)).status,200);
   assert.equal((await gatewayRequest(f.request('/auth/permissions/refresh',{token,method:'POST'}),f.env)).status,403);
   assert.equal((await gatewayRequest(f.request('/auth/permissions/refresh',{token}),f.env)).status,403);
-  assert.equal((await gatewayRequest(f.request('/auth/permissions',{token:await f.signed({sub:'quant@clients',azp:'quant',gty:'client-credentials',org_id:undefined,scope:'data.choice:read'})}),f.env)).status,403);
+  assert.equal((await gatewayRequest(f.request('/auth/permissions',{token:await f.signed({sub:'quant@clients',azp:'quant',gty:'client-credentials',org_id:undefined,scope:'data.choice:read'})}),f.env)).status,401);
   assert.ok(f.calls.auth0.length>before,'manual refresh consults Auth0');
   assert.equal((await gatewayRequest(f.request('/__gateway-permissions/v1/org_Eastmoney',{token}),f.env)).status,403);
 });

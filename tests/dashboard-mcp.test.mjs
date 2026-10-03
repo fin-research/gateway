@@ -22,7 +22,7 @@ test('Dashboard MCP accepts only site/portal user JWTs, validates identity befor
   assert.equal((await gatewayRequest(request(token,{Origin:'https://evil.test'}),f.env)).status,403);
   const machine=await f.signed({azp:'quant',sub:'quant@clients',gty:'client-credentials',scope:'data.choice:read'});
   assert.equal((await gatewayRequest(request(machine),f.env)).status,403);
-  assert.equal((await gatewayRequest(new Request(f.env.SITE_ORIGIN+'/api/mcp',{method:'POST',headers:{Cookie:'__Host-eastmoney_session='+await f.signed()},body:'{}'}),f.env)).status,403);
+  assert.equal((await gatewayRequest(new Request(f.env.SITE_ORIGIN+'/api/mcp',{method:'POST',headers:{Authorization:'Bearer '+await f.signed(),Origin:'https://evil.test'},body:'{}'}),f.env)).status,403);
   for(const path of ['/api/credit','/api/profile','/financing/projects']) assert.equal((await gatewayRequest(f.request(path,{token}),f.env)).status,403,path);
 });
 test('private MCP policies and dispatch enforce fresh real-route permission and named action',async t=>{

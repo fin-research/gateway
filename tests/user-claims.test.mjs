@@ -14,22 +14,22 @@ const legacyClaims = user => ({
 test('flat claims normalize Cookie/Bearer identity and resolve role names using cached organization roles', async t => {
   const f = await fixture(t);
   const token = await f.signed({ user: undefined, ...f.flatClaims });
-  for (const headers of [{ Cookie: SESSION_COOKIE + '=' + token }, { Authorization: 'Bearer ' + token }]) {
+  for (const headers of [{ Authorization: 'Bearer ' + token }]) {
     for (const path of ['/api/credit', '/data/choice/css']) {
       assert.equal((await gatewayRequest(f.request(path, { headers }), f.env)).status, 200);
     }
-    const session = await gatewayRequest(f.request('/auth/session', { headers }), f.env);
-    assert.equal(session.status, 200);
-    const data = await session.json();
-    assert.deepEqual(data.account, { name: '测试账号', department: '测试' });
-    assert.deepEqual(data.roles, [{ id: 'rol_Authenticated', name: 'authenticated' }]);
+    const permissions = await gatewayRequest(f.request('/auth/permissions', { headers }), f.env);
+    assert.equal(permissions.status, 200);
+    assert.deepEqual(Object.keys(await permissions.json()).sort(), ['permissions','updatedAt']);
+    const data = await authorizeRequest(f.request('/api/credit', { headers }), f.env, '/api/credit');
     assert.equal(data.user.email, 'test@18.cn');
-    assert.equal(data.role, undefined);
-    assert.equal(data._roles, undefined);
+    assert.equal(data.user.authorization.name, '测试账号');
+    assert.deepEqual(data.user.authorization.roles.map(({ id,name }) => ({ id,name })), [{ id:'rol_Authenticated',name:'authenticated' }]);
   }
-  const minimal = await f.signed({ user: undefined, ...f.flatClaims, username: undefined, department: undefined, picture: undefined });
-  const session = await (await gatewayRequest(f.request('/auth/session', { token: minimal }), f.env)).json();
-  assert.deepEqual(session.account, { name: 'test@18.cn', department: '' });
+  const minimal = await f.signed({ username: undefined, department: undefined, picture: undefined });
+  const data = await authorizeRequest(f.request('/api/credit', { token:minimal }), f.env, '/api/credit');
+  assert.equal(data.user.authorization.name, 'test@18.cn');
+  assert.equal(data.user.authorization.department, '');
   assert.equal(f.calls.auth0.length, 0);
 });
 
@@ -40,8 +40,8 @@ test('flat role array is authoritative; database role and reserved roles never g
     const token = await f.signed({ user: adminLegacy, ...legacyClaims(adminLegacy), ...f.flatClaims, role, roles: ['admin'], permissions: ['credit.institution:update'] });
     assert.equal((await gatewayRequest(f.request('/management/people', { token }), f.env)).status, 403);
     assert.equal((await gatewayRequest(f.request('/api/credit', { token, method: 'POST' }), f.env)).status, 403);
-    const session = await (await gatewayRequest(f.request('/auth/session', { token }), f.env)).json();
-    assert.deepEqual(session.roles, [{ id: 'rol_Authenticated', name: 'authenticated' }]);
+    const data = await authorizeRequest(f.request('/api/credit', { token }), f.env, '/api/credit');
+    assert.deepEqual(data.user.authorization.roles.map(({ id,name }) => ({ id,name })), [{ id:'rol_Authenticated',name:'authenticated' }]);
   }
   const admin = await f.signed({ ...f.flatClaims, _roles: ['admin'], role: 'authenticated' });
   const result = await authorizeRequest(f.request('/management/people', { token: admin }), f.env, '/management/people');
@@ -68,7 +68,7 @@ test('malformed, unknown, duplicate and ambiguous role names fail closed without
     assert.equal((await gatewayRequest(f.request('/api/credit', { token }), f.env)).status, 401);
   }
   const missingEmail = await f.signed({ ...f.flatClaims, email: undefined });
-  assert.equal((await gatewayRequest(f.request('/api/credit', { token: missingEmail }), f.env)).status, 403);
+  assert.equal((await gatewayRequest(f.request('/api/credit', { token: missingEmail }), f.env)).status, 401);
   await f.updateRoles([{ id: 'rol_A', name: 'admin' }, { id: 'rol_B', name: 'admin' }]);
   const ambiguous = await f.signed({ ...f.flatClaims, _roles: ['admin'] });
   assert.equal((await gatewayRequest(f.request('/api/credit', { token: ambiguous }), f.env)).status, 401);
@@ -125,49 +125,36 @@ test('flat claims preserve MCP client isolation and fail closed when permission 
   assert.equal((await gatewayRequest(f.request('/', { token: siteToken }), f.env)).status, 200);
 });
 
-test('new user fields and existing namespaced JWTs authorize the same Cookie and Bearer requests', async t => {
+test('nested user and namespaced JWTs are rejected even when correctly signed', async t => {
   const f = await fixture(t);
-  for (const claims of [{}, { user: undefined, ...legacyClaims(f.userClaims) }]) {
-    const token = await f.signed(claims);
-    for (const headers of [{ Cookie: SESSION_COOKIE + '=' + token }, { Authorization: 'Bearer ' + token }]) {
+  for (const claims of [{ user: f.userClaims }, legacyClaims(f.userClaims)]) {
+    const token = await f.signed({ ...claims, username: undefined, email: undefined, role: undefined, _roles: undefined, department: undefined, picture: undefined });
+    for (const headers of [{ Authorization: 'Bearer ' + token }]) {
       for (const path of ['/api/credit', '/data/choice/css']) {
-        assert.equal((await gatewayRequest(f.request(path, { headers }), f.env)).status, 200);
+        const response = await gatewayRequest(f.request(path, { headers }), f.env);
+        assert.equal(response.status, 401);
+        assert.equal((await response.json()).code, 'TOKEN_REFRESH_REQUIRED');
       }
-      const session = await gatewayRequest(f.request('/auth/session', { headers }), f.env);
-      assert.equal(session.status, 200);
-      assert.equal((await session.json()).user.email, 'test@18.cn');
     }
   }
-  assert.equal(f.calls.auth0.length, 0, 'claim migration must not introduce Management API lookups');
-});
-
-test('present user claim never falls back to old roles, profile or email', async t => {
-  const f = await fixture(t);
-  const legacy = legacyClaims(f.userClaims);
-  for (const [user, status] of [[null, 401], [[], 401], ['invalid', 401],
-    [{ ...f.userClaims, roles: undefined }, 401], [{ ...f.userClaims, profile: undefined }, 401],
-    [{ ...f.userClaims, email: undefined }, 403], [{ ...f.userClaims, roles: [] }, 403]]) {
-    const token = await f.signed({ ...legacy, user });
-    assert.equal((await gatewayRequest(f.request('/api/credit', { token }), f.env)).status, status);
-  }
+  assert.equal(f.calls.auth0.length, 0);
   assert.equal(f.calls.dashboard.length, 0);
-  const token = await f.signed({ ...legacy, 'https://eastmoney.hasbai.xyz/email': 'wrong@example.com' });
-  assert.equal((await gatewayRequest(f.request('/api/credit', { token }), f.env)).status, 200);
+  assert.equal(f.calls.data.length, 0);
 });
 
-test('login callback accepts flat and legacy Action claims and rejects mismatched email', async t => {
+test('incomplete new claims never fall back to nested user or namespaced fields', async t => {
   const f = await fixture(t);
-  for (const claims of [{ user: undefined, ...legacyClaims(f.userClaims) }, { user: undefined, ...f.flatClaims }, { ...f.flatClaims, email: 'different@18.cn' }]) {
-    const start = await gatewayRequest(f.request('/auth/login'), f.env);
-    const auth = new URL(start.headers.get('Location'));
-    const transaction = start.headers.getSetCookie().find(value => value.startsWith('__Host-eastmoney_login=')).split(';')[0];
-    f.intercept(async url => url.pathname === '/oauth/token' ? Response.json({
-      token_type: 'Bearer', access_token: await f.signed(claims),
-      id_token: await f.signed({ email: 'test@18.cn', nonce: auth.searchParams.get('nonce') }, 'id'),
-    }) : undefined);
-    const result = await gatewayRequest(f.request('/auth/callback?code=unit&state=' + auth.searchParams.get('state'), { headers: { Cookie: transaction } }), f.env);
-    const matched = claims.email !== 'different@18.cn';
-    assert.equal(result.status, matched ? 303 : 401);
-    assert.equal(result.headers.getSetCookie().some(value => value.startsWith(SESSION_COOKIE + '=')), matched);
+  for (const fields of [{ _roles: undefined }, { email: undefined }, { role: undefined }]) {
+    const token = await f.signed({ ...legacyClaims(f.userClaims), user: f.userClaims, ...fields });
+    assert.equal((await gatewayRequest(f.request('/api/credit', { token }), f.env)).status, 401);
   }
+});
+
+test('Auth0 callbacks are forwarded to the client without exchanging codes or issuing session cookies', async t => {
+  const f = await fixture(t);
+  const response = await gatewayRequest(f.request('/auth/callback?code=unit&state=unit'), f.env);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.has('Set-Cookie'), false);
+  assert.equal(f.calls.auth0.length, 0);
+  assert.equal(f.calls.dashboard.length, 1);
 });

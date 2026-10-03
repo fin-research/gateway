@@ -6,8 +6,7 @@ export const ROUTE_PERMISSIONS: Record<string, Methods> = {
   '/': { GET: 'public' },
   '/api/mcp': { GET: 'login', POST: 'login', DELETE: 'login' },
   '/api/ai/responses': { POST: 'login' },
-  '/auth/login': { GET: 'login' }, '/auth/logout': { GET: 'public', POST: 'public' },
-  '/auth/session': { GET: 'public' }, '/auth/verify-email': { GET: 'public' },
+  '/auth/login': { GET: 'public' }, '/auth/callback': { GET: 'public' }, '/auth/logout': { GET: 'public' }, '/auth/verify-email': { GET: 'public' },
   '/market-briefing': { GET: 'public' },
   '/market-briefing/text': { GET: 'public' },
   // Compatibility for already-open reports; current clients read public /data resources directly.
@@ -64,7 +63,7 @@ export const ROUTE_PERMISSIONS: Record<string, Methods> = {
   '/financing': { GET: 'financing.overview:read' },
   '/financing/clients': { GET: 'financing.data:read', 'POST:create': 'financing.data:create', 'POST:update': 'financing.data:update' },
   '/financing/bond-investors': { GET: 'financing.data:read' },
-  '/financing/login': { GET: 'login' }, '/financing/logout': { GET: 'login', 'POST:default': 'login' },
+  '/financing/login': { GET: 'public' }, '/financing/logout': { GET: 'login', 'POST:default': 'login' },
   '/financing/people': { GET: 'admin' }, '/financing/settings': { GET: 'account.profile:read' },
   '/financing/avatar': { GET: 'account.profile:read' },
   '/financing/projects': { GET: 'financing.project:read', 'POST:createProject': 'financing.project:create', 'POST:updateProject': 'financing.project:update', 'POST:deleteProject': 'financing.project:delete' },

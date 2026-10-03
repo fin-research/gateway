@@ -20,7 +20,7 @@ test('Gateway serves the admin personnel directory and update without Dashboard 
     }
     return null;
   });
-  const admin = await f.signed({ user: { ...f.userClaims, roles: [{ id: 'rol_TestAdmin', name: 'admin' }] } });
+  const admin = await f.signed({ _roles: ['admin'] });
   const get = await gatewayRequest(f.request('/api/management/people', { token: admin }), f.env);
   assert.equal(get.status, 200);
   assert.deepEqual((await get.json()).map(({ id, name, department }) => ({ id, name, department })),

@@ -1,13 +1,13 @@
 # Gateway 开发与交付
 
-Gateway 是独立 Hono Worker。用户、角色与成员关系属于 Auth0；JWT、浏览器会话、缓存授权、账号目录与角色权限查询由 Gateway 维护。业务侧保留记录归属、业务状态、输入白名单与 RLS。共享协议和权限清单见 [AUTH](../../eastmoney/docs/AUTH.md)。
+Gateway 是独立 Hono Worker。用户、角色与成员关系属于 Auth0；JWT、缓存授权、账号目录与角色权限查询由 Gateway 维护。业务侧保留记录归属、业务状态、输入白名单与 RLS。共享协议和权限清单见 [AUTH](../../eastmoney/docs/AUTH.md)。
 
 `/financing-model/research` 是融资模型页的只读研究文档，由 `policy.ts` 映射到既有 `/financing-model` 路由权限，复用 `model.financing:read` 的 GET/HEAD；授权成功后，`QUANT_REPORT: ResearchReport` 命名绑定仅读取 Quant Worker 的 `/REPORT.html`。报告不由 Dashboard 处理，不暴露 Quant 原始产物或默认入口。权限与请求凭据剥离沿用原 Gateway 过程。
 
 ## 代码与契约
 
 - `src/app.ts`：Hono 路由、公开/保护分流、SvelteKit 数据请求错误协议。
-- `src/tokens.ts` / `session.ts`：固定 Auth0 JWKS、RS256/issuer/audience/azp/时效、PKCE/state/nonce、标准 JWT 会话 Cookie、加密登录事务、退出。
+- `src/tokens.ts` / `session.ts`：固定 Auth0 JWKS、RS256/issuer/audience/azp/时效、PKCE/state/nonce、浏览器 Bearer token、退役 Cookie 清理。
 - `src/lib/server/authorization.ts`：JWT 角色快照与正常权限检查；授权 JSON 缓存见 `permission-cache.ts`。
 - `src/lib/permissions.ts` / `route-permissions.ts` / `server/permission-policy.ts`：唯一权限目录及路由策略。前两份通过 `scripts/sync-dashboard-contracts.mjs` 同步到 Dashboard 供菜单与导航使用。
 - `src/identity-service.ts`：私有 `IdentityService`，账号目录、MCP 业务调用路由授权桥接与角色配置；保留原人员编辑私有入口供旧版本过渡。公网 `/api/management/people` 由 Gateway 直接处理管理员姓名、部门读取和写入，不经过 Dashboard。
@@ -17,7 +17,7 @@ Gateway 是独立 Hono Worker。用户、角色与成员关系属于 Auth0；JWT
 
 Dashboard 只在 `GatewayDashboard` 解析上下文并注入请求内 env；默认入口固定 404。Data 只在 `GatewayData` 消费授权结果，原 `InternalData` 供 Dashboard/Ingest 机器调用。两后端不得恢复公网 routes、workers.dev、preview 或 Custom Domain。
 
-`POST /api/ai/responses` 只向已登录用户放行，并执行 Cookie 请求的同源校验。Dashboard 将流式 Responses 请求转发到固定 Cloudflare AI Gateway 模型，Gateway 与浏览器均不接触上游密钥；浏览器用本站 HttpOnly 会话 Cookie 调用。
+`POST /api/ai/responses` 只向已登录用户放行，并执行站点写操作的同源校验。Dashboard 将流式 Responses 请求转发到固定 Cloudflare AI Gateway 模型，Gateway 与浏览器均不接触上游密钥；浏览器用本站 Bearer token 调用。
 
 ## 配置与本地验证
 
@@ -28,31 +28,23 @@ pnpm deploy:dry
 git diff --check
 ```
 
-先构建 Dashboard，再在此分别运行 `node scripts/verify-integration.mjs` 和 `node scripts/verify-integration.mjs --flat-claims` 验证旧、新声明。默认同级 Dashboard/Data；工作树通过 `DASHBOARD_CHECKOUT` / `DATA_CHECKOUT` 指定。该脚本执行真实 SvelteKit/Data handler，但 Auth0、数据库和业务上游使用模拟实现。权限验收禁止 browser。
+先构建 Dashboard，再在此运行 `node scripts/verify-integration.mjs` 验证 Bearer、新声明与实际 CSR 外壳边界。默认同级 Dashboard/Data；工作树通过 `DASHBOARD_CHECKOUT` / `DATA_CHECKOUT` 指定。该脚本执行真实 SvelteKit/Data handler，但 Auth0、数据库和业务上游使用模拟实现。权限验收禁止 browser。
 
 `pnpm auth:verify` 使用项目组根 `.env` 的 `test@18.cn` 做真实 HTTP 登录和只读探针。`AUTH_TEST_ENV_FILE` 可指定文件；密码只向固定 Auth0 登录 origin 提交一次。验证码/MFA/验证邮箱阻断必须报告，不关闭保护或用机器身份替代。
 
-Worker Secret：`AUTH0_CLIENT_SECRET`、`AUTH0_MANAGEMENT_CLIENT_SECRET`、`SESSION_SECRET`。登录事务密钥为 32 字节随机值的 Base64URL；仅保存在受限部署文件与 Worker Secret。Gateway 不再绑定权限数据库；使用命名 Cache API `eastmoney-permissions-v1`，不需要 KV、Durable Object 或数据库 migration。
+Worker 运行时仅需要 `AUTH0_MANAGEMENT_CLIENT_SECRET`；旧 `AUTH0_CLIENT_SECRET`、`SESSION_SECRET` 不再由代码读取。Gateway 不再绑定权限数据库；使用命名 Cache API `eastmoney-permissions-v1`，不需要 KV、Durable Object 或数据库 migration。
 
 生产公开 origin、Auth0 issuer/API audience、用户 client ID 和机器 client ID allowlist 均在 Wrangler vars。Quant 机器应用退役后 allowlist 为空；重新开放机器访问须另行审查 client、scope 和调用链。JWT 保存登录时的角色 ID/名称与资料，不含应用有效权限快照；每个受保护请求按 JWT 角色读取缓存授权并检查路由权限，只有 `enforce` 模式可用。角色成员变更在重新登录或个人资料页“刷新登录角色”取得新 token 后生效。
 
-公开首页保留匿名访问。若请求带有效本站会话，Gateway 同请求解析当前角色授权并把展示快照交给 Dashboard SSR，使入口卡片在首屏按权限呈现；身份或权限读取失败时以匿名首页继续，不向页面传递部分授权。登录后的首页响应为 private/no-store。
+公开首页保留匿名访问。若请求带有效本站会话，Gateway 同请求解析当前角色授权并把展示快照交给 Dashboard SSR，使入口卡片在首屏按权限呈现；身份或权限读取失败时以匿名首页继续，不向页面传递部分授权。带 Bearer 的首页响应为 private/no-store；浏览器首屏不依赖服务端登录快照。
 
-## 浏览器会话 Cookie
+## 浏览器 Bearer 登录
 
-`__Host-eastmoney_session` 直接保存 Auth0 签发的 RS256 Access JWT（`header.payload.signature`），不再套 JWE。Gateway 使用 Auth0 JWKS 验签并校验 issuer、API audience、组织、client 与时效；不把可解码的 claims 当作已认证身份。Cookie 保留 Secure、HttpOnly、SameSite=Lax、Path=/，有效期不晚于 JWT exp 且不超过签发后 24 小时；服务端也按已验签 iat 检查 24 小时上限。API Bearer token 沿用其自身 JWT 时效。
+浏览器使用 Auth0 SPA SDK、授权码 + PKCE；token 只存内存，通过 `Authorization: Bearer <JWT>` 调用站点。现有 `eastmoney` 客户端为 SPA、token endpoint auth method `none`，client ID 与 audience、organization、已登记 callback/origin 保持一致。Gateway 不交换浏览器授权码，不签发、读取登录 Cookie，不接受旧 nested `user` 或 URL namespace token。旧站点 Cookie 仅清理，不作鉴权来源。
 
-临时 `__Host-eastmoney_login` 包含 PKCE verifier、state、nonce，继续用 `SESSION_SECRET` 加密，有效期 10 分钟。旧 JWE 会话需要重新登录；Gateway 在后续 HTTP 响应清除旧五段式会话和已退役的 `credit-session`，退出也清理授信旧 Cookie。清理不覆盖回调新签发的 JWT，不改动授信对话存储。包含 Cookie 清理的响应禁止缓存。
+Dashboard 在 SvelteKit client init 中处理 callback、恢复 token 并安装同源 Bearer fetch。受保护页面 `ssr=false`，Gateway 仅按 `CLIENT_PAGE_ROUTES` 精确允许匿名 HTML 外壳；`__data.json`、业务 API、actions、材料和报告文件继续验签及授权。未登录的深链先进入 Auth0，无法静默恢复时交互登录；普通公开页面保持既有加载模式。文件下载使用授权 fetch，HTML 报告由 sandbox iframe 预览。token 不写 localStorage、URL、SSR HTML、日志或后端请求。
 
-### 自定义字段名称
-
-当前绑定的 Auth0 `login claims` Action（`35884b07-e1f4-4ab8-b66c-0325d5a055e4`）签入顶层 `username`、`email`、`role`、`_roles`；本站组织还提供可选 `department`、`picture`。`role` 是数据库使用的字符串，Gateway 不用它授予业务权限；`_roles` 是业务角色名称数组。顶层 `roles` 是 Auth0 保留字段，不作为自定义角色来源。
-
-Gateway 先验证 Auth0 签名、issuer、audience、client、org、subject 和时效，再把 `_roles` 精确匹配到当前组织权限缓存中的角色 ID。同一次请求的角色解析、admin/credit 检查和权限合并共用一份缓存快照，不按用户回查 Management API。空数组只表示没有业务角色；缺失、格式错误、重复、未知或歧义名称拒绝并要求刷新登录。`username` 映射为显示姓名；缺失时显示邮箱，缺失部门和头像使用空值。不伪造旧版 connection/verified 声明；当前组织仅启用 `eastmoney-email`，登录 Action 在签发时拒绝封禁账号和未验证邮箱。
-
-现有 nested `user` 和 URL 字段 token 兼容至原到期时间。`_roles`、`username` 或 `role` 任一字段出现即使用新格式，缺字段或格式错误不得从旧字段补值。JWT 仍原样保存，不重签、不修改，Gateway 到 Dashboard/Data 的身份契约保持不变。
-
-字段规则见 [Auth0 Custom Claims](https://auth0.com/docs/secure/tokens/json-web-tokens/create-custom-claims)。
+当前 token 仅接受顶层 `username`、`email`、`role`、`_roles`，本站还有可选 `department`、`picture`。`role` 是数据库角色字符串，不授予业务权限；`_roles` 是名称数组，Gateway 用组织权限缓存精确解析 ID，角色匹配和权限检查共用一份快照。缺失、重复、未知和歧义角色拒绝；不存在旧字段回退。姓名等客户端展示直接解析 JWT，并在 `/auth/permissions` 接受 token 后建立登录展示；该接口仅返回当前 `permissions` 与 `updatedAt`。`/auth/session` 已移除，返回 404。
 
 ## Auth0 配置
 

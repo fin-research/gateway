@@ -28,9 +28,7 @@
   },
   "secrets": {
     "required": [
-      "AUTH0_CLIENT_SECRET",
-      "AUTH0_MANAGEMENT_CLIENT_SECRET",
-      "SESSION_SECRET"
+      "AUTH0_MANAGEMENT_CLIENT_SECRET"
     ]
   },
   "services": [

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fixture } from './helpers/fixture.mjs';
 import { verifyToken } from '../src/tokens.ts';
-import { login } from '../src/session.ts';
+import { gatewayRequest } from '../src/app.ts';
 import { createDirectory } from '../src/lib/server/auth0-directory.ts';
 import action from '../auth0/actions/eastmoney-login.cjs';
 
@@ -10,16 +10,16 @@ test('site ID, user API and machine tokens reject absent or foreign organization
   const f = await fixture(t);
   for (const kind of ['id', 'access']) {
     for (const extra of [{}, { gty: 'client-credentials', azp: 'quant', sub: 'quant@clients' }]) {
-      for (const org_id of [...(kind === 'access' && extra.gty ? [] : [undefined]), 'org_Hasbai', ['org_Eastmoney']]) {
+      for (const org_id of [undefined, 'org_Hasbai', ['org_Eastmoney']]) {
         await assert.rejects(verifyToken(await f.signed({ ...extra, org_id }, kind), f.env, kind), { status: 401 });
       }
       assert.equal((await verifyToken(await f.signed(extra, kind), f.env, kind)).org_id, 'org_Eastmoney');
     }
   }
-  assert.equal((await verifyToken(await f.signed({ gty: 'client-credentials', azp: 'quant', sub: 'quant@clients', org_id: undefined }), f.env)).azp, 'quant');
+  await assert.rejects(verifyToken(await f.signed({ gty: 'client-credentials', azp: 'quant', sub: 'quant@clients', org_id: undefined }), f.env), {status:401});
   await assert.rejects(verifyToken(await f.signed({ gty: 'client-credentials', azp: 'foreign', sub: 'foreign@clients', org_id: undefined }), f.env), { status: 401 });
-  const result = await login(f.request('/auth/login?organization=org_Hasbai'), f.env);
-  assert.equal(new URL(result.headers.get('Location')).searchParams.get('organization'), 'org_Eastmoney');
+  const foreign = await f.signed({org_id:'org_Hasbai'});
+  assert.equal((await gatewayRequest(f.request('/api/credit?organization=org_Eastmoney',{token:foreign}),f.env)).status,401);
 });
 
 test('Eastmoney Action rejects missing/foreign org while other applications remain untouched', async () => {

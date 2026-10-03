@@ -1,14 +1,13 @@
 import { authorizeRequest } from './lib/server/authorization.ts';
 import { accessFailure, AccessError } from './lib/server/access.ts';
 import { loginUrl } from './lib/auth-navigation.ts';
-import { canonicalPath, dashboardRoute, requireSameOrigin } from './policy.ts';
+import { canonicalPath, dashboardRoute, clientPageShell } from './policy.ts';
 import { forwardedRequest } from './forward.ts';
-import { login, callback, logout, clearLegacyCookies } from './session.ts';
+import { clearLegacyCookies } from './session.ts';
 import { dataRequest } from './data.ts';
 import { permissionCache } from './lib/server/permission-cache.ts';
 import { profileRequest } from './identity-service.ts';
 import { createDirectory } from './lib/server/auth0-directory.ts';
-import { publicSession } from './lib/identity.ts';
 import { Hono } from 'hono';
 import { ProfileError, readProfileJson } from './lib/server/profile.ts';
 
@@ -22,26 +21,29 @@ app.use('*', async (c, next) => {
   if (path === '/data' || path.startsWith('/data/')) return dataRequest(c.req.raw, c.env);
   await next();
 });
-app.on('GET', ['/auth/login', '/financing/login'], c => login(c.req.raw, c.env));
-app.get('/auth/callback', c => callback(c.req.raw, c.env));
 // The single aggregate endpoint is hosted by Cloudflare MCP Portals. Do not
 // redirect POST requests across origins with caller credentials or proxy tools.
 app.all('/mcp', c => c.json({ detail: '统一 MCP 入口已迁移至 Cloudflare MCP 门户', mcpUrl: 'https://mcp.hasbai.xyz/mcp' }, 410, { 'Cache-Control': 'no-store' }));
-app.on(['GET', 'POST'], ['/auth/logout', '/financing/logout'], c => { requireSameOrigin(c.req.raw); return logout(c.env); });
+app.all('/auth/session', c => c.json({ detail: '入口已移除' }, 404, { 'Cache-Control': 'no-store' }));
 app.all('*', async c => {
     const request = c.req.raw, env = c.env;
     const path = canonicalPath(request);
     const route = dashboardRoute(request);
+    if (clientPageShell(request, route)) {
+      const response = await env.DASHBOARD.fetch(forwardedRequest(request, { version: 1, user: null, choice: { status: 401 } }));
+      const shell = new Response(response.body, response);
+      shell.headers.set('Cache-Control', 'no-store');
+      return shell;
+    }
     const { user, permissionUpdatedAt } = await authorizeRequest(request, env, route);
     if (path === '/auth/permissions') {
-      return Response.json({ roles: user!.authorization!.roles, permissions: user!.authorization!.permissions, updatedAt: permissionUpdatedAt },
+      return Response.json({ permissions: user!.authorization!.permissions, updatedAt: permissionUpdatedAt },
         { headers: { 'Cache-Control': 'no-store, private', Vary: 'Cookie, Authorization' } });
     }
     if (path === '/auth/permissions/refresh') {
       const snapshot = await permissionCache(env).refresh();
       return Response.json({ success: true, updatedAt: snapshot.updatedAt }, { headers: { 'Cache-Control': 'no-store, private' } });
     }
-    if (path === '/auth/session') return Response.json({ ...publicSession(user), enabled: true }, { headers: { 'Cache-Control': 'no-store, private', Vary: 'Cookie, Authorization' } });
     if (path === '/api/profile') return await profileRequest(request, env, user);
     if (path === '/api/management/people') {
       const headers = { 'Cache-Control': 'no-store, private', Vary: 'Cookie, Authorization' };

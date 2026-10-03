@@ -1,23 +1,19 @@
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey, type JWTPayload } from 'jose';
 import { AccessError } from './lib/server/access.ts';
+import { z } from 'zod';
 
-type UserClaims = { format: 'flat' | 'legacy'; email: unknown; roles: unknown; profile: unknown };
+const userClaimSchema = z.object({
+  username: z.string().max(200).optional().default(''), email: z.string().trim().toLowerCase().max(320),
+  role: z.string().min(1).max(200), _roles: z.array(z.string().min(1).max(200)).max(50),
+  department: z.string().max(100).optional().default(''), picture: z.string().max(2048).optional().default(''),
+});
 
-/** Called only with an Auth0-verified payload. Existing JWTs retain their old claim names until expiry. */
-export function userClaims(payload: JWTPayload): UserClaims {
-  // A partial new shape must not downgrade to a complete legacy identity.
-  if (['_roles', 'username', 'role'].some(key => Object.hasOwn(payload, key))) {
-    return { format: 'flat', email: payload.email, roles: payload._roles,
-      profile: { name: payload.username === undefined ? '' : payload.username,
-        department: payload.department === undefined ? '' : payload.department, picture: payload.picture === undefined ? '' : payload.picture } };
-  }
-  if (Object.hasOwn(payload, 'user')) {
-    if (!payload.user || typeof payload.user !== 'object' || Array.isArray(payload.user)) throw new AccessError(401, '登录凭证无效');
-    // A present new claim is authoritative; never fill malformed fields from legacy claims.
-    const user = payload.user as Record<string, unknown>;
-    return { format: 'legacy', email: user.email, roles: user.roles, profile: user.profile };
-  }
-  return { format: 'legacy', roles: payload['https://eastmoney.hasbai.xyz/roles'], profile: payload['https://eastmoney.hasbai.xyz/profile'], email: payload['https://eastmoney.hasbai.xyz/email'] };
+/** Only the current top-level Auth0 claims are accepted, after JWT verification. */
+export function userClaims(payload: JWTPayload): z.infer<typeof userClaimSchema> {
+  const claims = userClaimSchema.safeParse(payload);
+  if (!claims.success || new Set(claims.data._roles).size !== claims.data._roles.length)
+    throw new AccessError(401, '登录凭证需更新，请重新登录', 'TOKEN_REFRESH_REQUIRED');
+  return claims.data;
 }
 const keySets = new Map<string, JWTVerifyGetKey>();
 type TokenConfig = Pick<Env, 'AUTH0_LOGIN_DOMAIN' | 'AUTH0_AUDIENCE' | 'AUTH0_CLIENT_ID' | 'AUTH0_ORGANIZATION_ID' | 'AUTH0_MACHINE_CLIENT_IDS'>;
@@ -43,12 +39,7 @@ export async function verifyToken(token: string, env: TokenConfig, kind: 'access
     });
     if (!Number.isInteger(payload.iat) || payload.iat! > Date.now() / 1000 + 5 || payload.exp! <= payload.iat!) throw new AccessError(401, '登录凭证无效');
     if (kind === 'access' && typeof payload.azp !== 'string') throw new AccessError(401, '登录凭证无效');
-    // This tenant cannot issue organization M2M tokens. Only the configured
-    // Quant client may omit org_id; authorizeData still enforces its Choice scope.
-    const legacyMachine = kind === 'access' && payload.gty === 'client-credentials' && payload.org_id === undefined
-      && env.AUTH0_MACHINE_CLIENT_IDS?.split(',').map(id => id.trim()).includes(String(payload.azp))
-      && payload.sub === payload.azp + '@clients';
-    if (!legacyMachine && payload.org_id !== env.AUTH0_ORGANIZATION_ID) throw new AccessError(401, '请通过东方财富组织重新登录', 'ORGANIZATION_REQUIRED');
+    if (payload.org_id !== env.AUTH0_ORGANIZATION_ID) throw new AccessError(401, '请通过东方财富组织重新登录', 'ORGANIZATION_REQUIRED');
     return payload;
   } catch (error) {
     if (error instanceof AccessError) throw error;
