@@ -94,6 +94,10 @@ try {
   }
   const notice = await respond('/auth/verify-email?state=opaque&email=must-not-render%4018.cn', false);
   assert.equal(notice.status, 200); assert.doesNotMatch(await notice.text(), /opaque|must-not-render/); checks++;
+  for (const path of ['/articles/unit.html__data.json','/news/unit.html__data.json','/commentaries/unit.html__data.json','/financing/projects/unit.html__data.json','/management/%5f%5fdata.json']) {
+    const response=await respond(path,false,{headers:{Accept:'text/html'}});
+    assert.equal((await response.json()).type,'redirect',path); checks++;
+  }
   for (const headers of [{}, { 'X-Eastmoney-Gateway-Context': 'forged', Authorization: 'Bearer fake' }]) {
     assert.equal((await handlePublicRequest(new Request('https://data.workers.dev/data/choice/css', { headers }), {})).status, 404); checks++;
   }

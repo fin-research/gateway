@@ -70,6 +70,17 @@ test('retired cookies are expired on responses without issuing new credential co
   }
 });
 
+test('all SvelteKit data suffixes require authentication even with an HTML Accept header', async t => {
+  const f=await fixture(t);
+  for (const path of ['/articles/unit.html__data.json','/news/unit.html__data.json','/commentaries/unit.html__data.json','/financing/projects/unit.html__data.json','/management/%5f%5fdata.json','/management/__data.json']) {
+    const response=await gatewayRequest(f.request(path,{headers:{Accept:'text/html'}}),f.env);
+    const result=await response.json();
+    assert.equal(result.type,'redirect',path);
+    assert.match(result.location,/^\/auth\/login\?returnTo=/,path);
+    assert.equal(f.calls.dashboard.length,0,path);
+  }
+});
+
 test('client OAuth pages are public and Gateway never runs the old code exchange or popup protocol', async t => {
   const f=await fixture(t);
   for (const path of ['/auth/login','/auth/callback?state=opaque&code=unit','/auth/logout']) {

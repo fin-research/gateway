@@ -1,7 +1,7 @@
 import { authorizeRequest } from './lib/server/authorization.ts';
 import { accessFailure, AccessError } from './lib/server/access.ts';
 import { loginUrl } from './lib/auth-navigation.ts';
-import { canonicalPath, dashboardRoute, clientPageShell } from './policy.ts';
+import { canonicalPath, dashboardRoute, clientPageShell, pageDataRequest } from './policy.ts';
 import { forwardedRequest } from './forward.ts';
 import { clearLegacyCookies } from './session.ts';
 import { dataRequest } from './data.ts';
@@ -72,10 +72,10 @@ app.onError((error, c) => {
     if (error instanceof ProfileError) return Response.json({ detail: error.message }, { status: error.status, headers: { 'Cache-Control': 'no-store' } });
     if (error instanceof AccessError && error.status === 401 && request.method === 'GET'
       && !/^\/(?:api(?:\/|$)|data(?:\/|$)|mcp(?:\/|$))/.test(new URL(request.url).pathname)
-      && (request.headers.get('Accept')?.includes('text/html') || new URL(request.url).pathname.endsWith('/__data.json'))) {
+      && (request.headers.get('Accept')?.includes('text/html') || pageDataRequest(request))) {
       const url = new URL(request.url);
-      const path = url.pathname.replace(/\/__data\.json$/, '');
-      if (url.pathname.endsWith('/__data.json')) return Response.json({ type: 'redirect', location: loginUrl(path + url.search) }, { headers: { 'Cache-Control': 'no-store, private' } });
+      const path = canonicalPath(request);
+      if (pageDataRequest(request)) return Response.json({ type: 'redirect', location: loginUrl(path + url.search) }, { headers: { 'Cache-Control': 'no-store, private' } });
       return new Response(null, { status: 303, headers: { Location: loginUrl(path + url.search), 'Cache-Control': 'no-store, private' } });
     }
     return accessFailure(error);

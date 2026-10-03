@@ -9,7 +9,12 @@ export function canonicalPath(request: Request): string {
   let decoded: string;
   try { decoded = decodeURIComponent(path); } catch { throw new AccessError(403, '请求路径无效'); }
   if (/[\\\x00-\x1f\x7f?#]/.test(decoded) || decoded.includes('//')) throw new AccessError(403, '请求路径无效');
-  return decoded.replace(/\/__data\.json$/, '').replace(/\/$/, '') || '/';
+  return decoded.replace(/\.html__data\.json$/, '.html').replace(/\/__data\.json$/, '').replace(/\/$/, '') || '/';
+}
+
+/** Match both SvelteKit data suffixes; encoded variants also fail closed. */
+export function pageDataRequest(request: Request): boolean {
+  return /(?:\/|\.html)__data\.json$/.test(decodeURIComponent(new URL(request.url).pathname).replace(/\/$/, ''));
 }
 
 export function dashboardRoute(request: Request): string | null {
@@ -44,8 +49,7 @@ export const CLIENT_PAGE_ROUTES = new Set([
   '/secondary-bond-pool', '/trading-research', '/trading-research/[view]',
 ]);
 export function clientPageShell(request: Request, routeId: string | null): boolean {
-  const path = new URL(request.url).pathname;
   return ['GET', 'HEAD'].includes(request.method) && request.headers.get('Accept')?.includes('text/html') === true
-    && !path.replace(/\/$/, '').endsWith('/__data.json') && canonicalPath(request) !== '/financing-model/research'
+    && !pageDataRequest(request) && canonicalPath(request) !== '/financing-model/research'
     && routeId !== null && CLIENT_PAGE_ROUTES.has(routeId);
 }
