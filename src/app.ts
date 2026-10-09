@@ -2,7 +2,7 @@ import { authorizeRequest } from './lib/server/authorization.ts';
 import { accessFailure, AccessError } from './lib/server/access.ts';
 import { loginUrl } from './lib/auth-navigation.ts';
 import { canonicalPath, dashboardRoute, clientPageShell, pageDataRequest } from './policy.ts';
-import { forwardedRequest } from './forward.ts';
+import { forwardedRequest, backendResponse } from './forward.ts';
 import { clearLegacyCookies } from './session.ts';
 import { dataRequest } from './data.ts';
 import { permissionCache } from './lib/server/permission-cache.ts';
@@ -10,6 +10,7 @@ import { profileRequest } from './identity-service.ts';
 import { createDirectory } from './lib/server/auth0-directory.ts';
 import { Hono } from 'hono';
 import { ProfileError, readProfileJson } from './lib/server/profile.ts';
+import { Auth0Error } from './lib/server/auth0-management.js';
 
 export const app = new Hono<{ Bindings: Env }>({ strict: false });
 app.use('*', async (c, next) => {
@@ -30,7 +31,7 @@ app.all('*', async c => {
     const path = canonicalPath(request);
     const route = dashboardRoute(request);
     if (clientPageShell(request, route)) {
-      const response = await env.DASHBOARD.fetch(forwardedRequest(request, { version: 1, user: null, choice: { status: 401 } }));
+      const response = await backendResponse(env.DASHBOARD, forwardedRequest(request, { version: 1, user: null, choice: { status: 401 } }), 'dashboard', route);
       const shell = new Response(response.body, response);
       shell.headers.set('Cache-Control', 'no-store');
       return shell;
@@ -56,8 +57,8 @@ app.all('*', async c => {
     }
     const forwarded = forwardedRequest(request, { version: 1, user, choice: { status: 401 } });
     const response = path === '/financing-model/research'
-      ? await env.QUANT_REPORT.fetch(new Request(new URL('/REPORT.html', request.url), forwarded))
-      : await env.DASHBOARD.fetch(forwarded);
+      ? await backendResponse(env.QUANT_REPORT, new Request(new URL('/REPORT.html', request.url), forwarded), 'quant-report', route)
+      : await backendResponse(env.DASHBOARD, forwarded, 'dashboard', route);
     if (response.status === 101) return response;
     const result = new Response(response.body, response);
     if (user) {
@@ -77,6 +78,10 @@ app.onError((error, c) => {
       const path = canonicalPath(request);
       if (pageDataRequest(request)) return Response.json({ type: 'redirect', location: loginUrl(path + url.search) }, { headers: { 'Cache-Control': 'no-store, private' } });
       return new Response(null, { status: 303, headers: { Location: loginUrl(path + url.search), 'Cache-Control': 'no-store, private' } });
+    }
+    if (!(error instanceof AccessError) && !(error instanceof Auth0Error)) {
+      console.error(JSON.stringify({ event: 'gateway_request_failed', route: dashboardRoute(request), method: request.method }));
+      return accessFailure(new AccessError(503, '网关服务暂时不可用，请稍后重试', 'GATEWAY_UNAVAILABLE'));
     }
     return accessFailure(error);
 });

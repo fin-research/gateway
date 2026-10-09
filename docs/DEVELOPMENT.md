@@ -68,6 +68,8 @@ Dashboard 在 SvelteKit client init 中处理 callback、恢复 token 并安装�
 
 ## MCP 与错误语义
 
+Dashboard 和 Quant 报告的私有 binding 抛错返回 503 `BACKEND_UNAVAILABLE`，记录服务、路由模板、方法及安全失败原因；CPU 终止不能误报为身份服务故障。业务后端正常返回的校验、权限、冲突及数据库错误保持原响应。转发写请求不自动重放。Gateway 未分类异常返回 `GATEWAY_UNAVAILABLE`；Auth0/JWKS 的身份错误仍由身份层处理。
+
 统一入口由 Cloudflare MCP Portals 提供；端点、Auth0 和 Cloudflare 凭据配置见 [MCP](MCP.md)。Gateway 的旧 `/mcp` 已退役。`pnpm auth:verify` 含真实 MCP 初始化、工具目录、只读调用和输入错误探针。匿名保护请求先返回 401；已登录的未登记入口返回 403 `ROUTE_NOT_REGISTERED`，账号拒绝仍为 `ACCESS_DENIED`。
 
 ## 身份接口限流恢复
