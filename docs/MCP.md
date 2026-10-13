@@ -1,6 +1,6 @@
 # Cloudflare MCP 门户
 
-项目唯一统一入口为 `https://mcp.hasbai.xyz/mcp`，由 Cloudflare MCP Portals 托管。
+Eastmoney MCP 统一入口为 `https://eastmoney-mcp.hasbai.xyz/mcp`，由 Cloudflare MCP Portals 托管。`https://mcp.hasbai.xyz/mcp` 现由北极小站使用。
 Gateway 不再聚合 MCP。旧 `https://eastmoney.hasbai.xyz/mcp` 返回 410 和新端点提示，不转发工具或登录凭据。
 Data 单资源 MCP 保留在 `https://eastmoney.hasbai.xyz/data/mcp`，作为门户上游。REST、OpenAPI 和 MCP 复用 Data 的资源 Schema。
 
@@ -8,7 +8,7 @@ Data 单资源 MCP 保留在 `https://eastmoney.hasbai.xyz/data/mcp`，作为门
 
 | 资源 | 地址/ID | 边界 |
 |---|---|---|
-| 托管门户 | `mcp.hasbai.xyz/mcp`。portal `eastmoney` | Cloudflare Access managed OAuth，允许已登录的 18.cn 账号 |
+| 托管门户 | `eastmoney-mcp.hasbai.xyz/mcp`。portal `eastmoney` | Cloudflare Access managed OAuth，允许已登录的 18.cn 账号 |
 | Data 上游 | `eastmoney.hasbai.xyz/data/mcp`。server `data` | Auth0 逐用户 OAuth，`on_behalf=true`。Gateway 验证当前账号状态 |
 | Dashboard 上游 | `eastmoney.hasbai.xyz/api/mcp`。server `dashboard` | Auth0 逐用户 OAuth，`on_behalf=true`。业务查询、修改与 AI 生成按当前用户路由权限执行 |
 | 研究库上游 | `research.hasbai.xyz/mcp`。server `research` | AI Search research。不接入 credit 私密材料库 |
@@ -44,7 +44,7 @@ Code Mode 当前关闭。工具定义和执行由 Cloudflare 转发。研究查�
 - `scripts/configure-mcp-portal.mjs applications` 建立门户及上游 Access 策略、映射和 DNS。
 - `scripts/configure-mcp-portal.mjs client-redirects` 为已有门户补齐 ChatGPT DCR 回调白名单，保留完整应用配置、原白名单和登录策略。
 - `scripts/configure-mcp-portal.mjs credit-plan/credit` 只读盘点或幂等登记原生授信搜索、18.cn Access 应用与 `on_behalf=false` 映射，保留其他上游设置。
-- DNS 为 proxied CNAME `mcp.hasbai.xyz` → `gateway.agents.cloudflare.com`。
+- DNS 为 proxied CNAME `eastmoney-mcp.hasbai.xyz` → `gateway.agents.cloudflare.com`。
 - Auth0 配置按[共享 AUTH](../../eastmoney/docs/AUTH.md#auth0-本地租户管理) 使用 Auth0 skill 和 CLI。数据库连接只针对门户客户端修改，保留已有客户端。
 - Auth0 Action 发布只 patch code，保留 Secret、依赖和绑定。MCP client ID 与 Wrangler 配置同步。
 
@@ -74,14 +74,16 @@ HTTP 注册检查不等同于 ChatGPT 界面内完整连接验收。
 官方依据：[MCP Portals](https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/mcp-portals/)、
 [Managed OAuth](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/)。
 
-## 2026-09-09 实际验收
+## 2026-09-09 历史验收
+
+以下结果记录当时 `mcp.hasbai.xyz` 承载 Eastmoney MCP 的状态。域名已迁至 `eastmoney-mcp.hasbai.xyz`；旧地址现由北极小站使用，以下地址和结果仅作历史证据。
 
 - 门户服务器身份为 `cloudflare-mcp-portal`。匿名 `/mcp` 返回 401 和标准 OAuth metadata。
 - `test@18.cn` 通过真实 Auth0 登录、Cloudflare managed OAuth PKCE 和 Data 逐用户授权。
 - 门户列出 27 个工具：23 个 `data_*`、`research_search` 和 3 个 Cloudflare 管理工具。
 - 经门户调用 `data_health` 返回 `ok`，`research_search` 在日期硬过滤和 50 条上限下返回成功。
 - `scripts/verify-managed-mcp.mjs` 可复现以上流程。只使用程序化 HTTP，不执行浏览器。客户端公有 ID 可以在 `.ops` 缓存，Cookie、code、JWT、Secret 仅驻留进程内存。
-- 本机代理曾对新域名产生 TLS 连接失败。直接连接已验证正常。必要时仅对子进程设置 `NO_PROXY=mcp.hasbai.xyz`，不改门户配置绕过认证。
+- 本机代理曾对当时的 `mcp.hasbai.xyz` 产生 TLS 连接失败。直接连接已验证正常。该代理记录仅对应历史域名。
 - Data 69 项、Gateway 44 项检查和真实后端处理器 32 项联调通过。自建聚合代码及依赖已移除，旧站点 `/mcp` 返回 410 和新地址。
 - Cloudflare 先发送 `server/discover` / `2026-07-28`。当前 Hono MCP 返回 404 协商旧协议。Data 现保留该协议响应，不再误转换为 503，门户可回退并正常连接。
 - 当次凭据可管理门户、Access、DNS 和 Gateway 发布。Data 手动发布曾因 VPC 权限返回 10196。修复经 Git 自动部署上线，最终以真实工具调用验收。
@@ -101,7 +103,7 @@ HTTP 注册检查不等同于 ChatGPT 界面内完整连接验收。
 恢复命令（仅重建测试账号的 Data 授权）：
 
 ```sh
-NO_PROXY=mcp.hasbai.xyz node --env-file=../eastmoney/.env --use-env-proxy scripts/verify-managed-mcp.mjs --reauthorize-data --check-catalog
+NO_PROXY=eastmoney-mcp.hasbai.xyz node --env-file=../eastmoney/.env --use-env-proxy scripts/verify-managed-mcp.mjs --reauthorize-data --check-catalog
 ```
 
 通过 Node 的 `--env-file` 执行上述命令，并对进程设置 `NO_PROXY`。
@@ -120,7 +122,7 @@ Dashboard 使用 SvelteKit + Cloudflare Agents MCP SDK v2，接口与工具目�
 
 运行 `node --env-file=../eastmoney/.env --use-env-proxy scripts/configure-mcp-portal.mjs dashboard` 可幂等添加上游、其 18.cn/专用 IdP Access 应用和 `on_behalf=true` 映射。保留现有 Data/研究库和工具策略。Gateway 授权桥接先发布，再发布 Dashboard，最后配置门户。
 
-程序化验收：`AUTH_TEST_ENV_FILE` 指向项目组未跟踪 `.env`，运行 `NO_PROXY=mcp.hasbai.xyz node --use-env-proxy scripts/verify-managed-mcp.mjs --dashboard --check-catalog`。检查 managed OAuth、三个上游、Dashboard 业务读取、无效写入拒绝和后台 Ready。这个只读/无效输入验收不等于真实写入或每个 AI 工具逐项执行。
+程序化验收：`AUTH_TEST_ENV_FILE` 指向项目组未跟踪 `.env`，运行 `NO_PROXY=eastmoney-mcp.hasbai.xyz node --use-env-proxy scripts/verify-managed-mcp.mjs --dashboard --check-catalog`。检查 managed OAuth、三个上游、Dashboard 业务读取、无效写入拒绝和后台 Ready。这个只读/无效输入验收不等于真实写入或每个 AI 工具逐项执行。
 
 ## Credit AI Search 原生上游
 
@@ -136,7 +138,7 @@ Data、Dashboard、research 映射不变。门户内 Credit Access 应用允许�
 在 Gateway 仓库使用程序化登录验收：
 
 ```sh
-NO_PROXY=mcp.hasbai.xyz node --env-file=../eastmoney/.env --use-env-proxy scripts/verify-managed-mcp.mjs --dashboard --credit --check-catalog
+NO_PROXY=eastmoney-mcp.hasbai.xyz node --env-file=../eastmoney/.env --use-env-proxy scripts/verify-managed-mcp.mjs --dashboard --credit --check-catalog
 ```
 
 该命令确认四个上游连接、

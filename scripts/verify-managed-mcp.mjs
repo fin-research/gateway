@@ -2,7 +2,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { SessionCookies, parseLoginPage, boundedText, readAuthTestConfig } from './lib/programmatic-login.mjs';
 
-const portal = 'https://mcp.hasbai.xyz';
+const portal = 'https://eastmoney-mcp.hasbai.xyz';
 const team = 'https://hasbai.cloudflareaccess.com';
 const auth = 'https://auth.hasbai.xyz';
 const callback = 'http://127.0.0.1:8768/callback';

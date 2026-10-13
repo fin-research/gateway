@@ -7,7 +7,8 @@ const account = '5cecc63c78acf8f5473f8745f4244448';
 const zone = 'e0665efd9fd68d06cbb9ab68a13cc7c6';
 const clientId = 'M1a5PF3UJaFIZv1k4HO4IV06Z5fXQBHV';
 const organizationId = 'org_6yvoRRCkzk3eGkBS';
-const origin = 'https://mcp.hasbai.xyz';
+const origin = 'https://eastmoney-mcp.hasbai.xyz';
+const portalDomain = 'eastmoney-mcp.hasbai.xyz';
 const apiOrigin = 'https://eastmoney.hasbai.xyz';
 const token = process.env.CLOUDFLARE_API_TOKEN;
 if (!token) throw new Error('CLOUDFLARE_API_TOKEN is required');
@@ -21,7 +22,7 @@ async function api(path, method = 'GET', body) {
 const prefix = `accounts/${account}/access`;
 async function configureClientRedirects(id) {
   const app = await api(prefix + '/apps/' + id);
-  if (app.type !== 'mcp_portal' || app.domain !== 'mcp.hasbai.xyz') throw new Error('Expected the Eastmoney MCP portal application');
+  if (app.type !== 'mcp_portal' || app.domain !== portalDomain) throw new Error('Expected the Eastmoney MCP portal application');
   const oauth = addChatGptRedirectUris(app.oauth_configuration);
   if (!isDeepStrictEqual(oauth, app.oauth_configuration)) {
     // Cloudflare requires preserving the complete existing application on PUT.
@@ -173,19 +174,19 @@ if (mode === 'upstreams') {
     if (!app) app = await api(prefix + '/apps', 'POST', { ...config, name, type: 'mcp', destinations: [{ type: 'via_mcp_server_portal', mcp_server_id: id }] });
     console.log(JSON.stringify({ application: name, id: app.id, type: app.type }));
   }
-  let portalApp = apps.find(value => value.domain === 'mcp.hasbai.xyz');
-  if (!portalApp) portalApp = await api(prefix + '/apps', 'POST', { ...config, name: 'Eastmoney MCP Portal', type: 'mcp_portal', domain: 'mcp.hasbai.xyz',
-    destinations: [{ type: 'public', uri: 'mcp.hasbai.xyz' }], oauth_configuration: addChatGptRedirectUris({ enabled: true, dynamic_client_registration: { enabled: true, allow_any_on_localhost: true, allow_any_on_loopback: true }, grant: { access_token_lifetime: '15m', session_duration: '336h' } }) });
+  let portalApp = apps.find(value => value.domain === portalDomain);
+  if (!portalApp) portalApp = await api(prefix + '/apps', 'POST', { ...config, name: 'Eastmoney MCP Portal', type: 'mcp_portal', domain: portalDomain,
+    destinations: [{ type: 'public', uri: portalDomain }], oauth_configuration: addChatGptRedirectUris({ enabled: true, dynamic_client_registration: { enabled: true, allow_any_on_localhost: true, allow_any_on_loopback: true }, grant: { access_token_lifetime: '15m', session_duration: '336h' } }) });
   await configureClientRedirects(portalApp.id);
   const portal = await api(prefix + '/ai-controls/mcp/portals/eastmoney');
   await api(prefix + '/ai-controls/mcp/portals/eastmoney', 'PUT', { name: portal.name, hostname: portal.hostname, description: portal.description, code_mode: 'off', secure_web_gateway: false,
     servers: [...(portal.servers ?? []).filter(item => !['data', 'research'].includes(item.server_id)).map(portalServerSettings), { server_id: 'data', on_behalf: true, default_disabled: false }, { server_id: 'research', on_behalf: false, default_disabled: false }] });
-  const records = await api(`zones/${zone}/dns_records?name=mcp.hasbai.xyz`);
+  const records = await api(`zones/${zone}/dns_records?name=${portalDomain}`);
   if (records.length && !records.every(record => record.type === 'CNAME' && record.content === 'gateway.agents.cloudflare.com' && record.proxied)) throw new Error('Conflicting portal DNS; inspect before changing');
-  if (!records.length) await api(`zones/${zone}/dns_records`, 'POST', { type: 'CNAME', name: 'mcp.hasbai.xyz', content: 'gateway.agents.cloudflare.com', proxied: true, ttl: 1 });
+  if (!records.length) await api(`zones/${zone}/dns_records`, 'POST', { type: 'CNAME', name: portalDomain, content: 'gateway.agents.cloudflare.com', proxied: true, ttl: 1 });
   console.log(JSON.stringify({ portalApplicationId: portalApp.id, endpoint: origin + '/mcp', dataOnBehalf: true, dnsReady: true }));
 } else if (mode === 'client-redirects') {
-  const app = (await api(prefix + '/apps')).find(value => value.domain === 'mcp.hasbai.xyz');
+  const app = (await api(prefix + '/apps')).find(value => value.domain === portalDomain);
   if (!app) throw new Error('MCP portal application missing');
   await configureClientRedirects(app.id);
 } else throw new Error('Expected upstreams, dashboard, credit-plan, credit, applications, client-redirects, organization-plan or organization');

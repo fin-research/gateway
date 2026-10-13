@@ -7,7 +7,7 @@ for (const [resource, path] of [
   ['portals', `accounts/${account}/access/ai-controls/mcp/portals`],
   ['servers', `accounts/${account}/access/ai-controls/mcp/servers`],
   ['applications', `accounts/${account}/access/apps`],
-  ['dns', `zones/${zone}/dns_records?name=mcp.hasbai.xyz`],
+  ['dns', `zones/${zone}/dns_records?name=eastmoney-mcp.hasbai.xyz`],
 ]) {
   const response = await fetch('https://api.cloudflare.com/client/v4/' + path, {
     headers: { Authorization: 'Bearer ' + token }, redirect: 'error', signal: AbortSignal.timeout(30000),
