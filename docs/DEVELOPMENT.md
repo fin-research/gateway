@@ -119,3 +119,11 @@ Auth0 本组织角色 `admin` 为全站管理员。`scripts/provision-site-admin
 ## 融资客户名单
 
 `/financing/clients` 的 GET 与 create/update named actions 复用 `financing.data:read/create/update`。借入资金导入仍使用 POST `/financing/data/import` 与 `financing.data:import`，旧 Workflow 状态路由已退役。Dashboard 负责字段、客户归属、并发与事务校验。
+
+## 拆借台账
+
+`/trading-research/interbank-ledger` 使用 `research.interbank:read`，
+`/api/interbank/[...path]` 的 GET 使用同一读权限，POST 使用 `research.interbank:import`。
+资金导入与草稿保存权限独立于交易流程配置。目录定义同步到 Dashboard。
+Data 的 CAMEL 业务仅对 InternalData 开放，公网 `/data/camel/*` 保持 404。
+新增 scope 按共享 AUTH 的 CLI 流程注册；角色授权由组织管理员管理，全站 admin 沿用全部业务权限。

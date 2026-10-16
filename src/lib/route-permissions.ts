@@ -30,6 +30,7 @@ export const ROUTE_PERMISSIONS: Record<string, Methods> = {
   '/commentaries/[id]': { GET: 'research.article:read' }, '/api/commentaries/[id]': { GET: 'research.article:read' },
   '/trading-research': { GET: 'research.workspace:read' },
   '/trading-research/[view]': { GET: 'research.workspace:read' },
+  '/api/interbank/[...path]': { GET: 'research.interbank:read', POST: 'research.interbank:import' },
   '/api/trading-workflow/config': { GET: 'research.workspace:read', PUT: 'research.workflow:update' },
   '/api/economic-indicators': { GET: 'research.economic_indicator:read' },
   '/credit-workbench/[[view]]': { GET: 'credit.institution:read' },
@@ -91,7 +92,7 @@ export function pagePermission(pathname: string, routeId: string | null): Method
   if (routeId === '/credit-workbench/[[view]]' && path.endsWith('/assistant')) return 'login';
   if (routeId === '/trading-research/[view]') {
     if (path.endsWith('/credit-assistant')) return 'login';
-    const views: Record<string, PermissionCode> = { 'market-hotspots': 'research.hotspot:read', 'policy-tracking': 'research.policy:read', 'tracking-commentary': 'research.policy:read', 'secondary-bond-pool': 'bond.ledger:read', 'bond': 'bond.ledger:read', 'financing-model': 'model.financing:read', 'credit': 'credit.institution:read' };
+    const views: Record<string, PermissionCode> = { 'interbank-ledger': 'research.interbank:read', 'market-hotspots': 'research.hotspot:read', 'policy-tracking': 'research.policy:read', 'tracking-commentary': 'research.policy:read', 'secondary-bond-pool': 'bond.ledger:read', 'bond': 'bond.ledger:read', 'financing-model': 'model.financing:read', 'credit': 'credit.institution:read' };
     return views[path.split('/').pop() ?? ''] ?? ROUTE_PERMISSIONS[routeId]?.GET;
   }
   return ROUTE_PERMISSIONS[routeId ?? '']?.GET;

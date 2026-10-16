@@ -37,3 +37,17 @@ test('financing model business metrics use the same read permission as the publi
   assert.deepEqual(requestPolicy(new Request(url), routeId), { permission: 'model.financing:read' });
   assert.equal(clientRequestPermission(url, 'GET'), 'model.financing:read');
 });
+
+test('interbank page, reads and writes have independent registered scopes', () => {
+  for (const [path, method, scope] of [
+    ['/trading-research/interbank-ledger', 'GET', 'research.interbank:read'],
+    ['/api/interbank/borrowings', 'GET', 'research.interbank:read'],
+    ['/api/interbank/repayment-drafts', 'POST', 'research.interbank:import'],
+  ]) {
+    const url = new URL(path, 'https://eastmoney.hasbai.xyz');
+    const id = matchDashboardRoute(path);
+    assert.deepEqual(requestPolicy(new Request(url, { method }), id), { permission: scope });
+    assert.equal(clientRequestPermission(url, method), scope);
+  }
+  assert.equal(clientRequestPermission(new URL('https://eastmoney.hasbai.xyz/api/interbank/borrowings'), 'DELETE'), undefined);
+});

@@ -16,6 +16,8 @@ export const ACCESS_PROBES = [
   ['research.policy:read', '/trading-research/policy-tracking', [200]],
   ['research.article:read', '/news/auth-test-missing-record', [200]],
   ['research.workspace:read', '/trading-research', [200]],
+  ['research.interbank:read', '/trading-research/interbank-ledger', [200]],
+  ['research.interbank:read', '/api/interbank/borrowings?date=invalid', [400, 422]],
   ['research.economic_indicator:read', '/api/economic-indicators', [200]],
   ['bond.ledger:read', '/secondary-bond-pool', [200]],
   ['credit.institution:read', '/credit-workbench', [200]],
