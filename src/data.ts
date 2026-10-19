@@ -1,6 +1,6 @@
 import { Kind, parse, getOperationAST, type SelectionSetNode, type FragmentDefinitionNode } from 'graphql';
 import { readProfileJson } from './lib/server/profile.ts';
-import { authorizeData } from './lib/server/authorization.ts';
+import { authorizeData, authorizeRequest } from './lib/server/authorization.ts';
 import { AccessError } from './lib/server/access.ts';
 import { forwardedRequest, type GatewayContext } from './forward.ts';
 import { canonicalPath, publicDataRead, requireSameOrigin } from './policy.ts';
@@ -30,6 +30,11 @@ export function hasChoiceField(query: string, operationName?: string): boolean {
 export async function dataRequest(request: Request, env: Env): Promise<Response> {
   const context: GatewayContext = { version: 1, user: null, choice: { status: 401 } };
   const path = canonicalPath(request);
+  if (path === '/data/camel' || path.startsWith('/data/camel/')) {
+    await authorizeRequest(request, env, '/data/[...path]');
+    context.camel = { status: 204 };
+    return env.DATA.fetch(forwardedRequest(request, context));
+  }
   if (publicDataRead(request)) return env.DATA.fetch(forwardedRequest(request, context));
   if (path === '/data/graphql' && ['GET', 'HEAD', 'POST'].includes(request.method)) {
     if (request.method === 'POST') {

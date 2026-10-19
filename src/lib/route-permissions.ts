@@ -30,7 +30,6 @@ export const ROUTE_PERMISSIONS: Record<string, Methods> = {
   '/commentaries/[id]': { GET: 'research.article:read' }, '/api/commentaries/[id]': { GET: 'research.article:read' },
   '/trading-research': { GET: 'research.workspace:read' },
   '/trading-research/[view]': { GET: 'research.workspace:read' },
-  '/api/interbank/[...path]': { GET: 'research.interbank:read', POST: 'research.interbank:import' },
   '/api/trading-workflow/config': { GET: 'research.workspace:read', PUT: 'research.workflow:update' },
   '/api/economic-indicators': { GET: 'research.economic_indicator:read' },
   '/credit-workbench/[[view]]': { GET: 'credit.institution:read' },
@@ -113,6 +112,13 @@ export function matchDashboardRoute(path: string): string | null {
   return routes.find(route => route.pattern.test(path))?.id ?? null;
 }
 
+/** Exact CAMEL resource methods shared by Gateway and browser preflight. */
+export function camelRequestPermission(path: string, method: string): PermissionCode | undefined {
+  if (['GET', 'HEAD'].includes(method) && /^\/data\/camel\/(?:borrowings|repayment-drafts\/[A-Za-z0-9_-]{1,100})$/.test(path)) return 'research.interbank:read';
+  if (method === 'POST' && /^\/data\/camel\/(?:borrowings\/(?:parse|import)|attachments|repayment-drafts)$/.test(path)) return 'research.interbank:import';
+  return undefined;
+}
+
 /** Presentation-only preflight; the Gateway still authorizes every request. */
 export function clientRequestPermission(url: URL, method: string): Methods[string] {
   if (/%(?:2f|5c|00|25)/i.test(url.pathname)) return undefined;
@@ -122,6 +128,7 @@ export function clientRequestPermission(url: URL, method: string): Methods[strin
   if (/[\\\x00-\x1f\x7f?#]/.test(path) || path.includes('//')) return undefined;
   const id = matchDashboardRoute(path);
   method = method.toUpperCase();
+  if (path === '/data/camel' || path.startsWith('/data/camel/')) return camelRequestPermission(path, method);
   if (method === 'HEAD' || method === 'GET') return pagePermission(path, id);
   const names = [...url.searchParams.keys()].filter(name => name.startsWith('/'));
   if (method === 'POST' && (names.length > 1 || (names[0] && !/^\/[A-Za-z][A-Za-z0-9]*$/.test(names[0])))) return undefined;

@@ -57,7 +57,7 @@ test('anonymous and test@18.cn cover all registered routes and actions through c
       { id: '/data/[...path]', path: '/data/news', method: 'GET', scope: 'data.resource:read' },
       { id: '/data/[...path]', path: '/data/graphql', method: 'POST', scope: 'data.graphql:read' },
       { id: '/data/[...path]', path: '/data/choice/css', method: 'GET', scope: 'login' },
-      { id: '/data/[...path]', path: '/data/camel', method: 'GET', scope: 'login' },
+      { id: '/data/[...path]', path: '/data/camel/borrowings', method: 'GET', scope: 'research.interbank:read' },
       { id: '/financing/data/api/[...path]', path: '/financing/data/api/rpc/liability_weekly_report_data', method: 'POST', scope: 'financing.report:read' },
     );
     for (const { id, path, method, scope } of cases) {

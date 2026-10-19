@@ -57,7 +57,7 @@ test('public Data resource/method matrix never calls identity, and protected res
   for (const path of PUBLIC_DATA_RESOURCES) for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
     assert.equal((await gatewayRequest(f.request('/data' + path, { method }), f.env)).status, 401);
   }
-  for (const path of ['/choice/css', '/choice/csd', '/choice/ctr', '/choice/edb', '/choice/data-statistics', '/camel', '/camel/accounts', '/omo/extra', '/news/id/extra']) {
+  for (const path of ['/choice/css', '/choice/csd', '/choice/ctr', '/choice/edb', '/choice/data-statistics', '/omo/extra', '/news/id/extra']) {
     const spoof = { 'X-Eastmoney-Gateway-Context': JSON.stringify({ version: 1, choice: { status: 204 } }), 'X-Internal-Service': 'dashboard', 'Cf-Access-Authenticated-User-Email': 'test@18.cn' };
     assert.equal((await gatewayRequest(f.request('/data' + path, { headers: spoof }), f.env)).status, 401);
     assert.equal((await gatewayRequest(f.request('/data' + path, { token: await f.signed() }), f.env)).status, 200);

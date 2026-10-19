@@ -122,8 +122,10 @@ Auth0 本组织角色 `admin` 为全站管理员。`scripts/provision-site-admin
 
 ## 拆借台账
 
-`/trading-research/interbank-ledger` 使用 `research.interbank:read`，
-`/api/interbank/[...path]` 的 GET 使用同一读权限，POST 使用 `research.interbank:import`。
-资金导入与草稿保存权限独立于交易流程配置。目录定义同步到 Dashboard。
-Data 的 CAMEL 业务仅对 InternalData 开放，公网 `/data/camel/*` 保持 404。
-新增 scope 按共享 AUTH 的 CLI 流程注册；角色授权由组织管理员管理，全站 admin 沿用全部业务权限。
+`/trading-research/interbank-ledger` 使用 `research.interbank:read`。
+浏览器直接调用 `/data/camel/*`，Gateway 精确登记查询、解析、导入、附件和还款草稿资源。
+GET/HEAD 使用 `research.interbank:read`，POST 使用 `research.interbank:import` 并检查同源。
+准入后通过 `GatewayData` 传递独立 CAMEL verdict；用户凭据不转发给 Data。
+通用 `authorizeData` 的仅登录规则不适用于 CAMEL，不接受机器 Choice scope。
+旧 `/api/interbank/*` 已移除。资金凭据和 VPC 适配留在 Data，ZIP 和归档编排留在浏览器。
+权限沿用已注册 scope，无 Auth0 目录变更。

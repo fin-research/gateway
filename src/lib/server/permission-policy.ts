@@ -3,7 +3,7 @@ import { AccessError } from './access.ts';
 
 type Policy = { permission?: PermissionCode; public?: boolean; login?: boolean; admin?: boolean };
 export { ROUTE_PERMISSIONS } from '../route-permissions.ts';
-import { ROUTE_PERMISSIONS, pagePermission } from '../route-permissions.ts';
+import { ROUTE_PERMISSIONS, pagePermission, camelRequestPermission } from '../route-permissions.ts';
 
 export function actionNameFromUrl(url: URL): string {
   const names = [...url.searchParams.keys()].filter((name) => name.startsWith('/'));
@@ -23,7 +23,7 @@ export function requestPolicy(request: Request, routeId: string | null): Policy 
   if (routeId === '/data/[...path]') {
     if (!['GET', 'POST'].includes(method)) throw new AccessError(403, '数据操作未登记');
     value = /^\/data\/choice(?:\/|$)/.test(path) ? 'login'
-      : /^\/data\/camel(?:\/|$)/.test(path) ? 'login'
+      : /^\/data\/camel(?:\/|$)/.test(path) ? camelRequestPermission(path, method)
       : path === '/data/graphql' ? 'data.graphql:read' : method === 'GET' ? 'data.resource:read' : undefined;
   } else {
     const methods = ROUTE_PERMISSIONS[routeId ?? ''];

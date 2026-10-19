@@ -7,6 +7,7 @@ export interface GatewayContext {
   version: 1;
   user: SiteIdentity | null;
   choice: { status: 204 | 401 | 403 | 503 };
+  camel?: { status: 204 };
 }
 
 /** Trust is the named Service Binding. Incoming headers never create this context. */

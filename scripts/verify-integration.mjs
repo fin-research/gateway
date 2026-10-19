@@ -102,6 +102,12 @@ try {
     assert.equal((await handlePublicRequest(new Request('https://data.workers.dev/data/choice/css', { headers }), {})).status, 404); checks++;
   }
   assert.equal((await respond('/data/health', false)).status, 200); checks++;
+  assert.equal((await respond('/data/camel/borrowings?date=invalid', false)).status, 401); checks++;
+  assert.equal((await respond('/data/camel/borrowings?date=invalid')).status, 422); checks++;
+  assert.equal((await respond('/data/camel/borrowings?date=invalid', true, { method: 'HEAD' })).status, 422); checks++;
+  assert.equal((await respond('/data/camel/borrowings/import', true, {method:'POST',headers:{'Content-Type':'application/json'},body:'{"records":[]}'})).status, 422); checks++;
+  assert.equal((await respond('/api/interbank/borrowings')).status, 403); checks++;
+
   for (const path of ['/data/choice/css', '/data/choice/csd', '/data/choice/ctr', '/data/choice/edb']) {
     assert.equal((await respond(path, false)).status, 401); assert.equal((await respond(path)).status, 422); checks += 2;
   }
