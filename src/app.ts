@@ -9,11 +9,19 @@ import { permissionCache } from './lib/server/permission-cache.ts';
 import { profileRequest } from './identity-service.ts';
 import { createDirectory } from './lib/server/auth0-directory.ts';
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { ProfileError, readProfileJson } from './lib/server/profile.ts';
 import { Auth0Error } from './lib/server/auth0-management.js';
 import { aiResponses } from './ai.ts';
 
 export const app = new Hono<{ Bindings: Env }>({ strict: false });
+const responsesCors = cors({
+  origin: origin => origin,
+  credentials: true,
+  allowMethods: ['POST', 'OPTIONS'],
+  exposeHeaders: ['cf-aig-log-id', 'WWW-Authenticate'],
+  maxAge: 86400,
+});
 app.use('*', async (c, next) => {
   if (new URL(c.req.url).origin !== c.env.SITE_ORIGIN) throw new AccessError(403, '请求域名无效');
   const path = canonicalPath(c.req.raw);
@@ -21,6 +29,7 @@ app.use('*', async (c, next) => {
   // Normalize segment encodings/trailing slashes before dispatch, retaining the
   // original request for SvelteKit's data protocol and business handlers.
   if (path === '/data' || path.startsWith('/data/')) return dataRequest(c.req.raw, c.env);
+  if (path === '/api/ai/responses' && !pageDataRequest(c.req.raw)) return responsesCors(c, next);
   await next();
 });
 // The single aggregate endpoint is hosted by Cloudflare MCP Portals. Do not

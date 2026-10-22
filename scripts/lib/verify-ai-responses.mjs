@@ -3,16 +3,28 @@ import { AuthTestError, SITE_ORIGIN, boundedText } from './programmatic-login.mj
 // Opt-in: three small real generations; no external tool or business write.
 export async function verifyAiResponses(session) {
   const endpoint = SITE_ORIGIN + '/api/ai/responses';
+  const origin = 'https://client.example';
   const send = (body, headers = session.bearerHeaders()) => fetch(endpoint, {
     method: 'POST', redirect: 'error', signal: AbortSignal.timeout(300_000),
-    headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    headers: { Origin: origin, 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body),
   });
   const require = (condition, message) => { if (!condition) throw new AuthTestError('AI_VERIFICATION_FAILED', message); };
+  const checkCors = response => {
+    require(response.headers.get('Access-Control-Allow-Origin') === origin && response.headers.get('Access-Control-Allow-Credentials') === 'true', 'AI CORS headers missing');
+  };
+  const preflight = await fetch(endpoint, { method: 'OPTIONS', headers: { Origin: origin,
+    'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'authorization,content-type,priority' } });
+  require(preflight.status === 204, `AI preflight returned ${preflight.status}`);
+  checkCors(preflight);
+  const allowedHeaders = preflight.headers.get('Access-Control-Allow-Headers')?.toLowerCase().split(',').map(value => value.trim());
+  require(['authorization', 'content-type', 'priority'].every(value => allowedHeaders?.includes(value)), 'AI preflight headers missing');
+  console.log(JSON.stringify({ ai: 'cors-preflight', status: preflight.status, passed: true }));
   for (const [identity, headers, status] of [
     ['anonymous', {}, 401], ['invalid-token', { Authorization: 'Bearer invalid' }, 401],
-    ['foreign-origin', { ...session.bearerHeaders(), Origin: 'https://other.test' }, 403],
+    ['text-plain', { ...session.bearerHeaders(), 'Content-Type': 'text/plain;charset=UTF-8' }, 415],
   ]) {
     const response = await send({ input: 'Do not run' }, headers);
+    checkCors(response);
     await response.body?.cancel();
     require(response.status === status, `${identity} AI boundary returned ${response.status}`);
     console.log(JSON.stringify({ ai: identity, status: response.status, passed: true }));
@@ -22,6 +34,7 @@ export async function verifyAiResponses(session) {
       schema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'], additionalProperties: false } },
   } });
   require(response.status === 200, `JSON AI request returned ${response.status}`);
+  checkCors(response);
   const json = JSON.parse(await boundedText(response));
   const outputText = value => value.output?.filter(item => item.type === 'message' && (!item.phase || item.phase === 'final_answer'))
     .flatMap(item => item.content ?? []).filter(item => item.type === 'output_text').map(item => item.text).join('') ?? '';
@@ -31,6 +44,7 @@ export async function verifyAiResponses(session) {
   const stream = async body => {
     const response = await send({ ...body, stream: true, reasoning: { effort: 'low' }, store: false, include: ['reasoning.encrypted_content'] });
     require(response.status === 200 && response.headers.get('Content-Type')?.includes('text/event-stream'), `SSE AI request returned ${response.status}`);
+    checkCors(response);
     const text = await boundedText(response);
     const events = text.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trim()).filter(line => line && line !== '[DONE]').map(line => JSON.parse(line));
     const completed = events.find(event => event.type === 'response.completed')?.response;

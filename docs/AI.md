@@ -4,7 +4,9 @@
 
 必须携带 `Authorization: Bearer <本站用户 Access JWT>`。沿用本站 Auth0 issuer、audience、客户端、组织、用户和角色校验，不要求额外业务权限。匿名、过期 token、ID token、机器 token 和 Cookie 身份均拒绝。
 
-程序调用可省略 `Origin`。携带时必须为 `https://eastmoney.hasbai.xyz`；异源、`null` 和空值拒绝。不开放跨域 CORS。
+允许任意来源 CORS，包括 `Origin: null`。预检 OPTIONS 无需 token，返回 204；实际 POST 必须携带本站 Bearer。响应回显 Origin 并允许 credentials，兼容 `credentials:"include"`；Cookie 仍不用于认证。程序调用可省略 Origin。此规则仅适用于本接口，其他写接口保持同源要求。
+
+请求必须使用 `Content-Type: application/json`，不兼容 `text/plain`；即使正文是 JSON 字符串，使用 `text/plain;charset=UTF-8` 仍返回 415。
 
 ```sh
 curl https://eastmoney.hasbai.xyz/api/ai/responses \
@@ -42,4 +44,4 @@ JSON/SSE 保留 Responses 成功结构和工具循环事件。HTTP 200 中仍可
 
 Wrangler vars 为 `CLOUDFLARE_ACCOUNT_ID`、`AI_GATEWAY_ID`；Worker Secret 为 `CF_AIG_TOKEN`。Provider 密钥及 base URL 由 Cloudflare AI Gateway 的 BYOK 管理。`enable_request_signal` 支持客户端断连取消上游。应用日志不记录凭据及完整输入输出。
 
-验证命令见 [DEVELOPMENT](DEVELOPMENT.md)。发布后执行 `pnpm auth:verify -- --ai`，复用一次真实本站登录，检查匿名/无效 token/异源拒绝、结构化 JSON 和两轮原生 SSE 函数调用。此选项会执行三次小型模型生成，不访问外部工具或写入业务数据。
+验证命令见 [DEVELOPMENT](DEVELOPMENT.md)。发布后执行 `pnpm auth:verify -- --ai`，复用一次真实本站登录，检查跨域预检、匿名/无效 token 拒绝、text/plain 的 415，以及跨域结构化 JSON 和两轮原生 SSE 函数调用。此选项会执行三次小型模型生成，不访问外部工具或写入业务数据。

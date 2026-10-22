@@ -17,7 +17,7 @@ Gateway 是独立 Hono Worker。用户、角色与成员关系属于 Auth0。JWT
 
 Dashboard 只在 `GatewayDashboard` 解析上下文并注入请求内 env。默认入口固定 404。Data 只在 `GatewayData` 消费授权结果，原 `InternalData` 供 Dashboard/Ingest 机器调用。两后端不得恢复公网 routes、workers.dev、preview 或 Custom Domain。
 
-`POST /api/ai/responses` 由 Gateway 验证本站用户 Bearer 后直接调用固定 Cloudflare AI Gateway 模型，支持 JSON 和原生 Responses SSE。程序调用可省略 Origin，携带 Origin 时严格同源。参数、状态和取消规则见 [通用 AI 接口](AI.md)。Dashboard 侧栏调用地址保持不变。
+`POST /api/ai/responses` 由 Gateway 验证本站用户 Bearer 后直接调用固定 Cloudflare AI Gateway 模型，支持 JSON 和原生 Responses SSE。本接口允许任意来源 CORS，支持带凭据请求及公开 OPTIONS 预检；实际 POST 仍须本站 Bearer，且只接受 application/json。参数、状态和取消规则见 [通用 AI 接口](AI.md)。Dashboard 侧栏调用地址保持不变。
 
 ## 配置与本地验证
 

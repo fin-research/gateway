@@ -20,16 +20,20 @@ test('AI route requires the site user Bearer, allows absent Origin, and never fo
   for (const claims of [{ aud: 'other' }, { org_id: 'other' }, { exp: 1 }, { azp: 'other' }, { gty: 'client-credentials' }]) {
     assert.ok([401, 403].includes((await send(await f.signed(claims), f.env.SITE_ORIGIN)).status));
   }
-  for (const origin of ['https://other.test', 'null', '']) assert.equal((await send(token, origin)).status, 403);
   assert.equal(f.calls.ai.length, 0);
   await f.updateGrants([]);
-  for (const origin of [f.env.SITE_ORIGIN, undefined]) {
-    const request = f.request('/api/ai/responses', { token, method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: 'untrusted=secret' }, body: JSON.stringify({ input: 'Hello' }) });
+  const origins = [f.env.SITE_ORIGIN, 'https://other.test', 'http://localhost:3000', 'null', undefined];
+  for (const origin of origins) {
+    const request = f.request('/api/ai/responses', { token, method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: 'untrusted=secret', Origin: origin ?? '' }, body: JSON.stringify({ input: 'Hello' }) });
     if (origin === undefined) request.headers.delete('Origin');
-    assert.equal((await gatewayRequest(request, f.env)).status, 200);
+    const response = await gatewayRequest(request, f.env);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('Access-Control-Allow-Origin'), origin ?? null);
+    assert.equal(response.headers.get('Access-Control-Allow-Credentials'), 'true');
+    assert.match(response.headers.get('Vary'), /Origin/);
   }
   assert.equal(f.calls.dashboard.length, 0);
-  assert.equal(f.calls.ai.length, 2);
+  assert.equal(f.calls.ai.length, origins.length);
   const headers = new Headers(f.calls.ai[0].init.headers);
   for (const name of ['Authorization', 'Cookie', 'Origin', 'X-Eastmoney-Gateway-Context']) assert.equal(headers.has(name), false);
   assert.equal(headers.get('cf-aig-authorization'), 'Bearer unit-ai-secret');
@@ -39,6 +43,46 @@ test('AI route requires the site user Bearer, allows absent Origin, and never fo
   }
   const other = f.request('/api/messenger/settings', { token, method: 'PUT' }); other.headers.delete('Origin');
   assert.equal((await gatewayRequest(other, f.env)).status, 403);
+});
+
+test('AI CORS preflight is public and credentialed; actual errors stay readable without opening other routes', async t => {
+  const f = await fixture(t);
+  const origin = 'https://client.example';
+  const preflight = await gatewayRequest(f.request('/api/ai/responses', { method: 'OPTIONS', headers: {
+    Origin: origin, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'authorization,content-type,priority',
+  } }), f.env);
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get('Access-Control-Allow-Origin'), origin);
+  assert.equal(preflight.headers.get('Access-Control-Allow-Credentials'), 'true');
+  assert.equal(preflight.headers.get('Access-Control-Allow-Methods'), 'POST,OPTIONS');
+  assert.equal(preflight.headers.get('Access-Control-Allow-Headers'), 'authorization,content-type,priority');
+  assert.equal(f.calls.auth0.length, 0);
+  assert.equal(f.calls.ai.length, 0);
+
+  const token = await f.signed();
+  for (const [auth, contentType, body, status] of [
+    [undefined, 'application/json', '{}', 401], ['invalid', 'application/json', '{}', 401],
+    [token, 'application/json', '{', 400], [token, 'text/plain;charset=UTF-8', '{"input":"hello"}', 415],
+  ]) {
+    const response = await gatewayRequest(f.request('/api/ai/responses', { token: auth, method: 'POST', headers: {
+      Origin: origin, 'Content-Type': contentType, Cookie: 'CF_Authorization=forged',
+    }, body }), f.env);
+    assert.equal(response.status, status);
+    assert.equal(response.headers.get('Access-Control-Allow-Origin'), origin);
+    assert.equal(response.headers.get('Access-Control-Allow-Credentials'), 'true');
+    assert.match(response.headers.get('Access-Control-Expose-Headers'), /WWW-Authenticate/);
+  }
+  assert.equal(f.calls.ai.length, 0);
+  for (const path of ['/api/profile', '/api/ai/responses/extra', '/api/ai/responses/__data.json']) {
+    const response = await gatewayRequest(f.request(path, { method: 'OPTIONS', headers: { Origin: origin } }), f.env);
+    assert.equal(response.status, 401);
+    assert.equal(response.headers.has('Access-Control-Allow-Origin'), false);
+  }
+  const otherWrite = await gatewayRequest(f.request('/api/profile', { token, method: 'POST', headers: {
+    Origin: origin, 'Content-Type': 'application/json',
+  }, body: '{"action":"name","name":"Do not write"}' }), f.env);
+  assert.equal(otherWrite.status, 403);
+  assert.equal(otherWrite.headers.has('Access-Control-Allow-Origin'), false);
 });
 
 test('JSON Responses preserve structured output and use a fixed provider/model with server-owned auth and reasoning defaults', async () => {
