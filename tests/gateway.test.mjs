@@ -31,11 +31,12 @@ test('real URL matching covers every registered route and method/action without 
     for (const [operation, scope] of Object.entries(methods)) {
       const [method, action] = operation.split(':');
       const url = path + (action ? '?/' + action : '');
+      const ai = path === '/api/ai/responses' ? { body: JSON.stringify({ input: 'hello' }), headers: { 'Content-Type': 'application/json' } } : {};
       // Auth endpoints and profile have dedicated execution tests, with no real account writes.
       if (path.startsWith('/auth/') || ['/financing/login', '/financing/logout', '/api/profile'].includes(path)) continue;
-      const anonymous = await gatewayRequest(f.request(url, { method }), f.env);
+      const anonymous = await gatewayRequest(f.request(url, { method, ...ai }), f.env);
       assert.equal(anonymous.status, scope === 'public' ? 200 : 401, `anonymous ${method} ${url}`);
-      assert.equal((await gatewayRequest(f.request(url, { token, method }), f.env)).status,
+      assert.equal((await gatewayRequest(f.request(url, { token, method, ...ai }), f.env)).status,
         scope === 'admin' || scope === 'credit.institution:update' ? 403 : 200, `${method} ${url}`);
     }
   }

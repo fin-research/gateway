@@ -17,7 +17,7 @@ Gateway 是独立 Hono Worker。用户、角色与成员关系属于 Auth0。JWT
 
 Dashboard 只在 `GatewayDashboard` 解析上下文并注入请求内 env。默认入口固定 404。Data 只在 `GatewayData` 消费授权结果，原 `InternalData` 供 Dashboard/Ingest 机器调用。两后端不得恢复公网 routes、workers.dev、preview 或 Custom Domain。
 
-`POST /api/ai/responses` 只向已登录用户放行，并执行站点写操作的同源校验。Dashboard 将流式 Responses 请求转发到固定 Cloudflare AI Gateway 模型，Gateway 与浏览器均不接触上游密钥。浏览器用本站 Bearer token 调用。
+`POST /api/ai/responses` 由 Gateway 验证本站用户 Bearer 后直接调用固定 Cloudflare AI Gateway 模型，支持 JSON 和原生 Responses SSE。程序调用可省略 Origin，携带 Origin 时严格同源。参数、状态和取消规则见 [通用 AI 接口](AI.md)。Dashboard 侧栏调用地址保持不变。
 
 ## 配置与本地验证
 
@@ -32,7 +32,7 @@ git diff --check
 
 `pnpm auth:verify` 使用项目组根 `.env` 的 `test@18.cn` 做真实 HTTP 登录和只读探针。`AUTH_TEST_ENV_FILE` 可指定文件。密码只向固定 Auth0 登录 origin 提交一次。验证码/MFA/验证邮箱阻断必须报告，不关闭保护或用机器身份替代。
 
-Worker 运行时仅需要 `AUTH0_MANAGEMENT_CLIENT_SECRET`。旧 `AUTH0_CLIENT_SECRET`、`SESSION_SECRET` 不再由代码读取。Gateway 不再绑定权限数据库。使用命名 Cache API `eastmoney-permissions-v1`，不需要 KV、Durable Object 或数据库 migration。
+Worker 运行时需要 `AUTH0_MANAGEMENT_CLIENT_SECRET` 和 AI 转发的 `CF_AIG_TOKEN`。旧 `AUTH0_CLIENT_SECRET`、`SESSION_SECRET` 不再由代码读取。Gateway 不再绑定权限数据库。使用命名 Cache API `eastmoney-permissions-v1`，不需要 KV、Durable Object 或数据库 migration。
 
 生产公开 origin、Auth0 issuer/API audience、用户 client ID 和机器 client ID allowlist 均在 Wrangler vars。Quant 机器应用退役后 allowlist 为空。重新开放机器访问须另行审查 client、scope 和调用链。JWT 保存登录时的角色名称与资料，不含应用有效权限快照。每个受保护请求按 JWT 角色读取缓存授权并检查路由权限，只有 `enforce` 模式可用。角色成员变更在重新登录或个人资料页“刷新登录角色”取得新 token 后生效。
 

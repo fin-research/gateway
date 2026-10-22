@@ -11,6 +11,7 @@ import { createDirectory } from './lib/server/auth0-directory.ts';
 import { Hono } from 'hono';
 import { ProfileError, readProfileJson } from './lib/server/profile.ts';
 import { Auth0Error } from './lib/server/auth0-management.js';
+import { aiResponses } from './ai.ts';
 
 export const app = new Hono<{ Bindings: Env }>({ strict: false });
 app.use('*', async (c, next) => {
@@ -46,6 +47,10 @@ app.all('*', async c => {
       return Response.json({ success: true, updatedAt: snapshot.updatedAt }, { headers: { 'Cache-Control': 'no-store, private' } });
     }
     if (path === '/api/profile') return await profileRequest(request, env, user);
+    if (path === '/api/ai/responses') {
+      if (pageDataRequest(request)) throw new AccessError(403, '该入口未登记', 'ROUTE_NOT_REGISTERED');
+      return aiResponses(request, env);
+    }
     if (path === '/api/management/people') {
       const headers = { 'Cache-Control': 'no-store, private', Vary: 'Cookie, Authorization' };
       if (request.method === 'GET' || request.method === 'HEAD') {

@@ -1,5 +1,6 @@
 import { setTimeout as pause } from 'node:timers/promises';
 import { AuthTestError, SITE_ORIGIN, createHttpSession, loginTestAccount, readAuthTestConfig, boundedText } from './lib/programmatic-login.mjs';
+import { verifyAiResponses } from './lib/verify-ai-responses.mjs';
 
 // GET only. Missing-record probes verify the authorization/validation boundary
 // without querying paid Choice data, generating AI, or mutating business state.
@@ -127,6 +128,7 @@ async function main() {
     console.log(JSON.stringify({ identity: config.email, path, initialize: true, tools: names.length, health: call.structuredContent?.data?.status, invalidChoiceRejected: invalid.isError === true }));
 
   }
+  if (process.argv.includes('--ai')) await verifyAiResponses(session);
   console.log(JSON.stringify({ programmaticLogin: true, browserUsed: false, probes: probes.length * 2,
     testAccount: config.email, permissions: permissions.size, failures }));
   if (failures.length) process.exitCode = 1;

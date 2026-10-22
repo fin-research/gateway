@@ -20,7 +20,8 @@ export async function fixture(t) {
   const cache = new PermissionCacheStore(jsonCache,key.href,
     async () => ({version:1,updatedAt:Date.now(),roles:catalogue,configurations:{rol_Authenticated:{permissions:grants}}}));
   await cache.refresh();
-  const calls = { dashboard: [], data: [], auth0: [] };
+  const calls = { dashboard: [], data: [], auth0: [], ai: [] };
+  Object.assign(env, { CLOUDFLARE_ACCOUNT_ID: 'unit-account', AI_GATEWAY_ID: 'default', CF_AIG_TOKEN: 'unit-ai-secret' });
   env.DASHBOARD = { async fetch(request) { calls.dashboard.push(request); return Response.json({ reached: 'dashboard' }); } };
   env.DATA = { async fetch(request) { calls.data.push(request); return Response.json({ reached: 'data' }); } };
   let profile = { user_id: 'auth0|test', email: 'test@18.cn', name: '测试账号', email_verified: true, identities: [{ connection: 'eastmoney-email' }] };
@@ -29,6 +30,10 @@ export async function fixture(t) {
   globalThis.fetch = async (input, init = {}) => {
     const url = new URL(input instanceof Request ? input.url : input);
     if (customFetch) { const response = await customFetch(url, init); if (response) return response; }
+    if (url.hostname === 'gateway.ai.cloudflare.com') {
+      calls.ai.push({ url, init });
+      return Response.json({ object: 'response', id: 'resp_unit', status: 'completed', output: [] });
+    }
     if (url.pathname.endsWith('/jwks.json')) return Response.json({ keys: [jwk] });
     calls.auth0.push(url.pathname);
     if (url.pathname === '/oauth/token') return Response.json({ access_token: 'unit-management', expires_in: 300 });

@@ -71,7 +71,8 @@ export async function authorizeRequest(request: Request, env: Env, routeId: stri
     throw error;
   }
   if (!user) return { user: null, permissions: [] as string[], directory: undefined, permissionUpdatedAt: undefined };
-  if (!(routeId === '/api/mcp' && request.headers.has('Authorization') && !request.headers.has('Origin'))) requireSameOrigin(request);
+  const bearerApi = routeId === '/api/mcp' || routeId === '/api/ai/responses';
+  if (!(bearerApi && request.headers.has('Authorization') && !request.headers.has('Origin'))) requireSameOrigin(request);
   try {
     const mode = authorizationMode(env.AUTHORIZATION_MODE);
     const profile = user.authorization!;
