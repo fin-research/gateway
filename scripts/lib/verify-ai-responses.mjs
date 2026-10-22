@@ -23,7 +23,8 @@ export async function verifyAiResponses(session) {
   } });
   require(response.status === 200, `JSON AI request returned ${response.status}`);
   const json = JSON.parse(await boundedText(response));
-  const outputText = value => value.output?.flatMap(item => item.content ?? []).filter(item => item.type === 'output_text').map(item => item.text).join('') ?? '';
+  const outputText = value => value.output?.filter(item => item.type === 'message' && (!item.phase || item.phase === 'final_answer'))
+    .flatMap(item => item.content ?? []).filter(item => item.type === 'output_text').map(item => item.text).join('') ?? '';
   require(json.object === 'response' && json.status === 'completed' && JSON.parse(outputText(json)).ok === true, 'Structured JSON generation failed');
   console.log(JSON.stringify({ ai: 'json-schema', status: response.status, model: json.model, passed: true, gatewayLogId: response.headers.get('cf-aig-log-id') }));
 
