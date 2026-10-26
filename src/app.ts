@@ -13,6 +13,7 @@ import { cors } from 'hono/cors';
 import { ProfileError, readProfileJson } from './lib/server/profile.ts';
 import { Auth0Error } from './lib/server/auth0-management.js';
 import { aiResponses } from './ai.ts';
+import { mcpResourceMetadata, mcpChallenge } from './mcp-auth.ts';
 
 export const app = new Hono<{ Bindings: Env }>({ strict: false });
 const responsesCors = cors({
@@ -32,9 +33,9 @@ app.use('*', async (c, next) => {
   if (path === '/api/ai/responses' && !pageDataRequest(c.req.raw)) return responsesCors(c, next);
   await next();
 });
-// The single aggregate endpoint is hosted by Cloudflare MCP Portals. Do not
-// redirect POST requests across origins with caller credentials or proxy tools.
-app.all('/mcp', c => c.json({ detail: '统一 MCP 入口已迁移至 Cloudflare MCP 门户', mcpUrl: 'https://mcp.hasbai.xyz/mcp' }, 410, { 'Cache-Control': 'no-store' }));
+app.get('/.well-known/oauth-protected-resource/api/mcp', c => c.json(mcpResourceMetadata(c.env), 200, { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }));
+app.get('/.well-known/oauth-protected-resource', c => c.json(mcpResourceMetadata(c.env), 200, { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }));
+app.all('/mcp', c => c.json({ detail: 'MCP 入口已移至 /api/mcp', mcpUrl: `${c.env.SITE_ORIGIN}/api/mcp` }, 410, { 'Cache-Control': 'no-store' }));
 app.all('/auth/session', c => c.json({ detail: '入口已移除' }, 404, { 'Cache-Control': 'no-store' }));
 app.all('*', async c => {
     const request = c.req.raw, env = c.env;
@@ -97,7 +98,11 @@ app.onError((error, c) => {
       console.error(JSON.stringify({ event: 'gateway_request_failed', route: dashboardRoute(request), method: request.method }));
       return accessFailure(new AccessError(503, '网关服务暂时不可用，请稍后重试', 'GATEWAY_UNAVAILABLE'));
     }
-    return accessFailure(error);
+    const response = accessFailure(error);
+    if (error instanceof AccessError && error.status === 401 && canonicalPath(request) === '/api/mcp') {
+      response.headers.set('WWW-Authenticate', mcpChallenge(c.env));
+    }
+    return response;
 });
 export async function gatewayRequest(request: Request, env: Env): Promise<Response> {
   const response = await app.fetch(request, env);

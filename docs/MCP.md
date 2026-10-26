@@ -2,7 +2,9 @@
 
 ## 当前 Dashboard 直连
 
-客户端直接连接 `https://eastmoney.hasbai.xyz/api/mcp`，使用 Streamable HTTP 和正常 Auth0 用户登录取得的本站 API access token Bearer。此链路不经过 Cloudflare MCP Portal，不加 `dashboard_` 前缀，不提供自动 OAuth discovery 或动态客户端注册。连接配置与发布目录由 [Dashboard MCP](../../dashboard/docs/MCP.md) 维护。
+客户端直接连接 `https://eastmoney.hasbai.xyz/api/mcp`，使用 Streamable HTTP 与 Auth0 OAuth 授权码/PKCE。此链路不经过 Cloudflare MCP Portal，不加 `dashboard_` 前缀。连接配置与发布目录由 [Dashboard MCP](../../dashboard/docs/MCP.md) 维护。
+
+Gateway 的 `/.well-known/oauth-protected-resource/api/mcp` 及根路径发现文档公开本站 API resource 与真实 Auth0 issuer。未登录 MCP 请求返回 401 和指向该文档的 `WWW-Authenticate`。Auth0 负责授权和 token；Gateway 不代理登录或签发 token。客户端使用已登记的专用 MCP client ID，回调须精确登记，DCR 未开放。
 
 标准点评统一为 `/api/commentaries`，读权限为 `research.policy:read`，人工写入保留既有 `research.policy_commentary:update`。旧 tracking 与政策点评接口移除，无别名。MCP 只提供已审核业务数据与人工操作，不发布 AI 生成工具；网站显式生成继续受原权限约束。
 
