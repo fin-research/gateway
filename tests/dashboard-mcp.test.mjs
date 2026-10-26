@@ -50,3 +50,12 @@ test('private dispatch refuses recursion, external destinations, credentials API
   assert.equal((await gatewayRequest(f.request('/mcp/dispatch?target=/api/credit',{token:await f.signed()}),f.env)).status,403);
   assert.equal(f.calls.dashboard.length,0);
 });
+
+test('canonical commentary routes share the policy boundary and reject retired write paths',async t=>{
+  const f=await fixture(t);const token=await f.signed();
+  await f.updateGrants(['research.article:read']);
+  assert.equal((await gatewayRequest(f.request('/api/commentaries/c',{token}),f.env)).status,403);
+  await f.updateGrants(['research.policy:read']);
+  for(const path of ['/api/commentaries','/api/commentaries/c','/api/commentaries/c/revisions','/api/commentaries/c/pdf'])assert.equal((await gatewayRequest(f.request(path,{token}),f.env)).status,200,path);
+  for(const [path,method] of [['/api/tracking-commentaries','GET'],['/api/tracking-commentaries/c','PUT'],['/api/policies/p/commentary','PUT'],['/api/policies/p/commentary','POST']])assert.equal((await gatewayRequest(f.request(path,{token,method,body:method==='GET'?undefined:'{}'}),f.env)).status,403,path);
+});

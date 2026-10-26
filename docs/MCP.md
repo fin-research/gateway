@@ -1,4 +1,14 @@
-# Cloudflare MCP 门户
+# Eastmoney MCP
+
+## 当前 Dashboard 直连
+
+客户端直接连接 `https://eastmoney.hasbai.xyz/api/mcp`，使用 Streamable HTTP 和正常 Auth0 用户登录取得的本站 API access token Bearer。此链路不经过 Cloudflare MCP Portal，不加 `dashboard_` 前缀，不提供自动 OAuth discovery 或动态客户端注册。连接配置与发布目录由 [Dashboard MCP](../../dashboard/docs/MCP.md) 维护。
+
+标准点评统一为 `/api/commentaries`，读权限为 `research.policy:read`，人工写入保留既有 `research.policy_commentary:update`。旧 tracking 与政策点评接口移除，无别名。MCP 只提供已审核业务数据与人工操作，不发布 AI 生成工具；网站显式生成继续受原权限约束。
+
+## Cloudflare 门户历史配置
+
+以下记录此前门户链路与资源配置，不作为当前 Dashboard 连接方式。
 
 Eastmoney MCP 统一入口为 `https://eastmoney-mcp.hasbai.xyz/mcp`，由 Cloudflare MCP Portals 托管。`https://mcp.hasbai.xyz/mcp` 现由北极小站使用。
 Gateway 不再聚合 MCP。旧 `https://eastmoney.hasbai.xyz/mcp` 返回 410 和新端点提示，不转发工具或登录凭据。
