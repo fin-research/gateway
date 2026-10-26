@@ -4,7 +4,7 @@ type Methods = Partial<Record<string, PermissionCode | 'public' | 'login' | 'adm
 /** Exact SvelteKit route IDs. Adding an endpoint requires registering it here. */
 export const ROUTE_PERMISSIONS: Record<string, Methods> = {
   '/': { GET: 'public' },
-  '/api/mcp': { GET: 'login', POST: 'login', DELETE: 'login' },
+  '/mcp': { GET: 'login', POST: 'login', DELETE: 'login' },
   '/api/ai/responses': { POST: 'login' },
   '/auth/login': { GET: 'public' }, '/auth/callback': { GET: 'public' }, '/auth/logout': { GET: 'public' }, '/auth/verify-email': { GET: 'public' },
   '/market-briefing': { GET: 'public' },

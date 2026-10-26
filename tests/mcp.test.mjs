@@ -5,7 +5,7 @@ import { fixture } from './helpers/fixture.mjs';
 
 test('missing authentication is 401 and registry errors are distinct from account denial', async t => {
   const f = await fixture(t);
-  for (const path of ['/choice/css', '/unknown', '/data/choice/css', '/data/mcp']) {
+  for (const path of ['/choice/css', '/unknown', '/data/choice/css']) {
     const response = await gatewayRequest(new Request(f.env.SITE_ORIGIN + path), f.env);
     assert.equal(response.status, 401, path);
     assert.equal((await response.json()).code, 'LOGIN_REQUIRED');
@@ -19,17 +19,9 @@ test('missing authentication is 401 and registry errors are distinct from accoun
   assert.equal(html.status, 401);
 });
 
-test('retired aggregate endpoint never executes research requests', async t => {
-  const f = await fixture(t);
-  const response = await gatewayRequest(f.request('/mcp', { method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search_search', arguments: { query: '债券' } } }) }), f.env);
-  assert.equal(response.status, 410);
-  assert.equal((await response.json()).mcpUrl, f.env.SITE_ORIGIN + '/api/mcp');
-  assert.equal(f.calls.data.length, 0); assert.equal(f.calls.dashboard.length, 0); assert.equal(f.calls.auth0.length, 0);
-});
-
 test('MCP validates identity before CSRF, never admits Quant credentials and requires current-format signed claims', async t => {
   const f = await fixture(t);
-  for (const path of ['/data/mcp']) {
+  for (const path of ['/mcp']) {
     assert.equal((await gatewayRequest(new Request(f.env.SITE_ORIGIN + path, { method: 'POST', body: '{}' }), f.env)).status, 401);
     const machine = await f.signed({ gty: 'client-credentials', azp: 'quant', sub: 'quant@clients', scope: 'data.choice:read' });
     assert.equal((await gatewayRequest(f.request(path, { method: 'POST', token: machine, body: '{}' }), f.env)).status, 403);
@@ -42,17 +34,17 @@ test('MCP validates identity before CSRF, never admits Quant credentials and req
 test('retired MCP paths advertise the direct endpoint without forwarding credentials', async t => {
   const f = await fixture(t);
   for (const method of ['GET', 'POST', 'DELETE']) {
-    const response = await gatewayRequest(f.request('/mcp', { method, token: await f.signed(), headers: { Cookie: 'private=fixture' } }), f.env);
+    const response = await gatewayRequest(f.request('/api/mcp', { method, token: await f.signed(), headers: { Cookie: 'private=fixture' } }), f.env);
     assert.equal(response.status, 410);
     assert.equal(response.headers.has('Location'), false);
-    assert.equal((await response.json()).mcpUrl, f.env.SITE_ORIGIN + '/api/mcp');
+    assert.equal((await response.json()).mcpUrl, f.env.SITE_ORIGIN + '/mcp');
   }
   assert.equal(f.calls.data.length, 0); assert.equal(f.calls.dashboard.length, 0); assert.equal(f.calls.auth0.length, 0);
 });
 
 test('Dashboard MCP discovers Auth0 OAuth from an unauthenticated challenge', async t => {
   const f = await fixture(t);
-  for (const path of ['/.well-known/oauth-protected-resource/api/mcp', '/.well-known/oauth-protected-resource']) {
+  for (const path of ['/.well-known/oauth-protected-resource/mcp', '/.well-known/oauth-protected-resource']) {
     const response = await gatewayRequest(new Request(f.env.SITE_ORIGIN + path), f.env);
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('Access-Control-Allow-Origin'), '*');
@@ -63,9 +55,9 @@ test('Dashboard MCP discovers Auth0 OAuth from an unauthenticated challenge', as
     });
   }
   for (const token of [undefined, 'invalid']) {
-    const response = await gatewayRequest(f.request('/api/mcp', { method: 'POST', token, body: '{}' }), f.env);
+    const response = await gatewayRequest(f.request('/mcp', { method: 'POST', token, body: '{}' }), f.env);
     assert.equal(response.status, 401);
-    assert.match(response.headers.get('WWW-Authenticate'), /resource_metadata="https:\/\/eastmoney\.hasbai\.xyz\/\.well-known\/oauth-protected-resource\/api\/mcp"/);
+    assert.match(response.headers.get('WWW-Authenticate'), /resource_metadata="https:\/\/eastmoney\.hasbai\.xyz\/\.well-known\/oauth-protected-resource\/mcp"/);
   }
   assert.equal(f.calls.dashboard.length, 0);
   const other = await gatewayRequest(f.request('/api/profile'), f.env);
@@ -76,11 +68,11 @@ test('retired portal Auth0 tokens cannot authorize Data MCP or ordinary API user
   const f = await fixture(t);
   const token = await f.signed({ azp: 'portal' });
   const request = path => f.request(path, { token, method: 'POST', body: '{}' });
-  assert.equal((await gatewayRequest(request('/data/mcp'), f.env)).status, 403);
+  assert.equal((await gatewayRequest(request('/data/mcp'), f.env)).status, 410);
   for (const path of ['/api/profile', '/data/choice/css', '/data/graphql', '/data/camel']) {
     assert.equal((await gatewayRequest(request(path), f.env)).status, path === '/data/graphql' ? 200 : 403);
   }
   f.updateProfile({ blocked: true });
-  assert.equal((await gatewayRequest(request('/data/mcp'), f.env)).status, 403);
+  assert.equal((await gatewayRequest(request('/data/mcp'), f.env)).status, 410);
   assert.equal(f.calls.auth0.length,0);
 });

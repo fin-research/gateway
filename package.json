@@ -19,6 +19,8 @@
     "test:coverage": "mkdir -p coverage && node --experimental-test-coverage --test-coverage-include='src/**/*.ts' --test-coverage-include='src/**/*.js' --test-coverage-exclude='src/**/generated/**' --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info --test tests/*.test.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "agents": "0.22.0",
     "graphql": "16.11.0",
     "hono": "4.13.5",
     "jose": "^6.2.12",

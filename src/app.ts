@@ -13,6 +13,7 @@ import { cors } from 'hono/cors';
 import { ProfileError, readProfileJson } from './lib/server/profile.ts';
 import { Auth0Error } from './lib/server/auth0-management.js';
 import { aiResponses } from './ai.ts';
+import { handleMcp } from './mcp.ts';
 import { mcpResourceMetadata, mcpChallenge } from './mcp-auth.ts';
 
 export const app = new Hono<{ Bindings: Env }>({ strict: false });
@@ -29,13 +30,17 @@ app.use('*', async (c, next) => {
   if (['/auth/login', '/auth/callback', '/financing/login'].includes(path) && c.req.method !== 'GET') throw new AccessError(403, '操作未登记');
   // Normalize segment encodings/trailing slashes before dispatch, retaining the
   // original request for SvelteKit's data protocol and business handlers.
+  if (['/api/mcp', '/data/mcp'].includes(path)) return c.json({ detail: 'MCP 入口已移至 /mcp', mcpUrl: c.env.SITE_ORIGIN + '/mcp' }, 410, { 'Cache-Control': 'no-store' });
   if (path === '/data' || path.startsWith('/data/')) return dataRequest(c.req.raw, c.env);
   if (path === '/api/ai/responses' && !pageDataRequest(c.req.raw)) return responsesCors(c, next);
   await next();
 });
-app.get('/.well-known/oauth-protected-resource/api/mcp', c => c.json(mcpResourceMetadata(c.env), 200, { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }));
+app.get('/.well-known/oauth-protected-resource/mcp', c => c.json(mcpResourceMetadata(c.env), 200, { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }));
 app.get('/.well-known/oauth-protected-resource', c => c.json(mcpResourceMetadata(c.env), 200, { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=300' }));
-app.all('/mcp', c => c.json({ detail: 'MCP 入口已移至 /api/mcp', mcpUrl: `${c.env.SITE_ORIGIN}/api/mcp` }, 410, { 'Cache-Control': 'no-store' }));
+app.all('/mcp', async c => {
+  const { user } = await authorizeRequest(c.req.raw, c.env, '/mcp');
+  return handleMcp(c.req.raw, c.env, user!);
+});
 app.all('/auth/session', c => c.json({ detail: '入口已移除' }, 404, { 'Cache-Control': 'no-store' }));
 app.all('*', async c => {
     const request = c.req.raw, env = c.env;
@@ -99,7 +104,7 @@ app.onError((error, c) => {
       return accessFailure(new AccessError(503, '网关服务暂时不可用，请稍后重试', 'GATEWAY_UNAVAILABLE'));
     }
     const response = accessFailure(error);
-    if (error instanceof AccessError && error.status === 401 && canonicalPath(request) === '/api/mcp') {
+    if (error instanceof AccessError && error.status === 401 && canonicalPath(request) === '/mcp') {
       response.headers.set('WWW-Authenticate', mcpChallenge(c.env));
     }
     return response;

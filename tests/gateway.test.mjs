@@ -31,13 +31,13 @@ test('real URL matching covers every registered route and method/action without 
     for (const [operation, scope] of Object.entries(methods)) {
       const [method, action] = operation.split(':');
       const url = path + (action ? '?/' + action : '');
-      const ai = path === '/api/ai/responses' ? { body: JSON.stringify({ input: 'hello' }), headers: { 'Content-Type': 'application/json' } } : {};
+      const ai = path === '/mcp' ? { ...(method === 'POST' ? {body: JSON.stringify({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'test',version:'1'}}})} : {}), headers:{Host:'eastmoney.hasbai.xyz','Content-Type':'application/json',Accept:'application/json, text/event-stream'} } : path === '/api/ai/responses' ? { body: JSON.stringify({ input: 'hello' }), headers: { 'Content-Type': 'application/json' } } : {};
       // Auth endpoints and profile have dedicated execution tests, with no real account writes.
       if (path.startsWith('/auth/') || ['/financing/login', '/financing/logout', '/api/profile'].includes(path)) continue;
       const anonymous = await gatewayRequest(f.request(url, { method, ...ai }), f.env);
       assert.equal(anonymous.status, scope === 'public' ? 200 : 401, `anonymous ${method} ${url}`);
       assert.equal((await gatewayRequest(f.request(url, { token, method, ...ai }), f.env)).status,
-        scope === 'admin' || scope === 'credit.institution:update' ? 403 : 200, `${method} ${url}`);
+        path === '/mcp' && method !== 'POST' ? 405 : scope === 'admin' || scope === 'credit.institution:update' ? 403 : 200, `${method} ${url}`);
     }
   }
   for (const [path, method] of [['/unknown', 'GET'], ['/financing/projects?/createProject&/deleteProject', 'POST'], ['/api/credit', 'DELETE'], ['/data%2fchoice/css', 'GET'], ['/api/%2563redit', 'GET'], ['/api/credit/extra', 'GET']]) {

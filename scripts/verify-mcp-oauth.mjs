@@ -30,7 +30,7 @@ async function request(target, options = {}) {
   }
   throw Error('OAuth redirect limit');
 }
-const metadataResponse = await fetch(site + '/.well-known/oauth-protected-resource/api/mcp');
+const metadataResponse = await fetch(site + '/.well-known/oauth-protected-resource/mcp');
 assert.equal(metadataResponse.status, 200);
 const metadata = await metadataResponse.json();
 assert.equal(metadata.authorization_servers[0], auth + '/'); assert.equal(metadata.resource, site + '/');
@@ -86,7 +86,7 @@ async function checkIdentity(token) {
 }
 await checkIdentity(tokens.access_token); assert.ok(tokens.refresh_token);
 async function rpc(token, method, params = {}) {
-  const response = await fetch(site + '/api/mcp', { method: 'POST', headers: { Authorization: 'Bearer ' + token,
+  const response = await fetch(site + '/mcp', { method: 'POST', headers: { Authorization: 'Bearer ' + token,
     'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }), signal: AbortSignal.timeout(60000) });
   assert.equal(response.status, 200, 'MCP request failed'); const raw = await response.text();
@@ -94,19 +94,22 @@ async function rpc(token, method, params = {}) {
     ? raw.split('\n').filter(line => line.startsWith('data: ')).map(line => JSON.parse(line.slice(6))).find(value => value.id === 1) : JSON.parse(raw);
   assert.ok(!value.error); return value.result;
 }
-const tools = await rpc(tokens.access_token, 'tools/list'); assert.equal(tools.tools.length, 15);
-for (const name of ['commentaries', 'credit_report']) assert.ok(!(await rpc(tokens.access_token, 'tools/call', { name, arguments: {} })).isError);
-for (const path of ['/api/profile', '/data/mcp']) {
+const tools = await rpc(tokens.access_token, 'tools/list'); assert.equal(tools.tools.length, 37);
+for (const name of ['commentaries', 'credit_report', 'chinamoney_shibor']) assert.ok(!(await rpc(tokens.access_token, 'tools/call', { name, arguments: {} })).isError);
+for (const path of ['/api/profile', '/data/choice/css']) {
   const response = await fetch(site + path, { headers: { Authorization: 'Bearer ' + tokens.access_token } });
   assert.equal(response.status, 403, path); await response.body?.cancel();
 }
+for (const path of ['/api/mcp', '/data/mcp']) {
+  const response = await fetch(site + path); assert.equal(response.status, 410, path); await response.body?.cancel();
+}
 const refreshed = await exchange({ grant_type: 'refresh_token', client_id: mcpClientIds[1], resource: metadata.resource, refresh_token: tokens.refresh_token });
 assert.ok(refreshed.refresh_token); assert.notEqual(refreshed.refresh_token, tokens.refresh_token);
-await checkIdentity(refreshed.access_token); assert.equal((await rpc(refreshed.access_token, 'tools/list')).tools.length, 15);
+await checkIdentity(refreshed.access_token); assert.equal((await rpc(refreshed.access_token, 'tools/list')).tools.length, 37);
 // Auth0 can authorize ChatGPT's real metadata and exact callback. Its private-key
 // assertion is held by ChatGPT, so the host must perform that final exchange.
 const chatgpt = await authorize(mcpClientIds[0], chatgptRedirect);
 assert.ok(!chatgpt.callback.has('error')); assert.ok(chatgpt.callback.get('code'));
 console.log({ discovery: true, cimd: true, issuerSuccessAndError: true, pkce: true, signedIdentity: true, refreshRotation: true,
-  tools: tools.tools.length, commentaryRead: true, maskedCreditRead: true, ordinaryRestAndDataRejected: true,
+  tools: tools.tools.length, commentaryRead: true, maskedCreditRead: true, dataRead: true, retiredEndpoints: true, ordinaryRestAndDataRejected: true,
   chatgptAuthorization: true, chatgptPrivateKeyExchange: 'requires ChatGPT host', browserUsed: false });

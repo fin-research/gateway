@@ -48,8 +48,9 @@ export const ACCESS_PROBES = [
   ['login', '/data/choice/ctr', [422]],
   ['login', '/data/choice/edb', [422]],
   ['login', '/data/camel', [403]],
-  ['login', '/data/mcp', [405]],
-  ['public', '/mcp', [410]],
+  ['login', '/mcp', [405]],
+  ['public', '/api/mcp', [410]],
+  ['public', '/data/mcp', [410]],
 ];
 
 function denied(response) {
@@ -67,7 +68,7 @@ async function main() {
   const config = await readAuthTestConfig();
   const anonymous = createHttpSession();
   const failures = [];
-  const probes = process.argv.includes('--mcp-only') ? [] : ACCESS_PROBES.map(([scope,path,status]) => [scope, scope !== 'public' && !path.startsWith('/api/') && !path.startsWith('/data/') && !path.startsWith('/auth/') ? path + '/__data.json' : path, status]);
+  const probes = process.argv.includes('--mcp-only') ? [] : ACCESS_PROBES.map(([scope,path,status]) => [scope, scope !== 'public' && path !== '/mcp' && !path.startsWith('/api/') && !path.startsWith('/data/') && !path.startsWith('/auth/') ? path + '/__data.json' : path, status]);
   for (const [scope, path, expected] of probes) {
     const response = await anonymous.request(SITE_ORIGIN + path, { headers: { Accept: path.endsWith('/__data.json') || path.startsWith('/api/') || path.startsWith('/data/') ? 'application/json' : 'text/html' }, followRedirects: false });
     const passed = scope === 'public' ? expected.includes(response.status) : denied(response);
@@ -103,29 +104,32 @@ async function main() {
     console.log(JSON.stringify({ permissionCacheRefresh: response.status, ownPermissions: snapshot.permissions?.length,
       authenticatedRole: hasBaseline, cacheUpdatedAt: snapshot.updatedAt }));
   }
-  for (const path of ['/data/mcp']) {
+  for (const path of ['/mcp']) {
     let id = 0;
     const rpc = async (method, params) => {
-      // Keep login form submission restricted to Auth0. Only this fixed pair of
-      // read-only MCP endpoints receives JSON and the already verified site cookie.
+      // Keep login form submission restricted to Auth0. Only this fixed
+      // MCP endpoint receives JSON and the verified site Bearer token.
       const response = await fetch(SITE_ORIGIN + path, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(60000),
         headers: { Origin: SITE_ORIGIN, ...session.bearerHeaders(), Accept: 'application/json, text/event-stream', 'Content-Type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }),
       });
-      const payload = JSON.parse(await boundedText(response));
+      const raw = await boundedText(response);
+      const payload = response.headers.get('content-type')?.includes('text/event-stream')
+        ? raw.split('\n').filter(line => line.startsWith('data: ')).map(line => JSON.parse(line.slice(6))).find(value => value.id === id)
+        : JSON.parse(raw);
       if (response.status !== 200 || payload.error) throw new AuthTestError('MCP_VERIFICATION_FAILED', `${path} ${method} failed: HTTP ${response.status}, RPC ${payload.error?.code ?? 'none'}, ${String(payload.error?.message ?? '').slice(0, 300)}`);
       return payload.result;
     };
     await rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'eastmoney-verification', version: '1' } });
     const list = await rpc('tools/list', {});
     const names = list.tools.map(tool => tool.name);
-    const expected = 25;
+    const expected = 37;
     if (names.length !== expected) failures.push(`${path} tool count: expected ${expected}, got ${names.length}`);
-    const call = await rpc('tools/call', { name: 'health', arguments: {} });
-    if (call.isError || call.structuredContent?.data?.status !== 'ok') failures.push(`${path} health`);
+    const call = await rpc('tools/call', { name: 'chinamoney_shibor', arguments: {} });
+    if (call.isError) failures.push(`${path} market data`);
     const invalid = await rpc('tools/call', { name: 'choice_css', arguments: {} });
     if (invalid.isError !== true) failures.push(`${path} validation`);
-    console.log(JSON.stringify({ identity: config.email, path, initialize: true, tools: names.length, health: call.structuredContent?.data?.status, invalidChoiceRejected: invalid.isError === true }));
+    console.log(JSON.stringify({ identity: config.email, path, initialize: true, tools: names.length, marketDataRead: !call.isError, invalidChoiceRejected: invalid.isError === true }));
 
   }
   if (process.argv.includes('--ai')) await verifyAiResponses(session);

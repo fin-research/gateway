@@ -19,7 +19,7 @@ export async function userIdentity(request: Request, env: Env, optional = false,
   const token = await accessToken(request);
   if (!token && optional) return null;
   const payload = await verifyToken(token ?? '', env);
-  const mcp = new URL(request.url).pathname.replace(/\/$/, '') === '/api/mcp';
+  const mcp = new URL(request.url).pathname.replace(/\/$/, '') === '/mcp';
   return identityFromPayload(payload, env, mcp && mcpClientIds.includes(String(payload.azp)) ? String(payload.azp) : env.AUTH0_CLIENT_ID, snapshot);
 }
 
@@ -72,7 +72,7 @@ export async function authorizeRequest(request: Request, env: Env, routeId: stri
     throw error;
   }
   if (!user) return { user: null, permissions: [] as string[], directory: undefined, permissionUpdatedAt: undefined };
-  const originOptionalMcp = routeId === '/api/mcp' && request.headers.has('Authorization') && !request.headers.has('Origin');
+  const originOptionalMcp = routeId === '/mcp' && request.headers.has('Authorization') && !request.headers.has('Origin');
   if (routeId !== '/api/ai/responses' && !originOptionalMcp) requireSameOrigin(request);
   try {
     const mode = authorizationMode(env.AUTHORIZATION_MODE);

@@ -13,5 +13,5 @@ export function mcpResourceMetadata(env: Pick<Env, 'SITE_ORIGIN' | 'AUTH0_LOGIN_
   };
 }
 export function mcpChallenge(env: Pick<Env, 'SITE_ORIGIN'>) {
-  return `Bearer resource_metadata="${env.SITE_ORIGIN}/.well-known/oauth-protected-resource/api/mcp", scope="${mcpOAuthScopes.join(' ')}"`;
+  return `Bearer resource_metadata="${env.SITE_ORIGIN}/.well-known/oauth-protected-resource/mcp", scope="${mcpOAuthScopes.join(' ')}"`;
 }
