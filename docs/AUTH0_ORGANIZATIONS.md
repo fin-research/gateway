@@ -4,7 +4,7 @@ Eastmoney 在共享租户 `hasbai.eu.auth0.com` 内使用组织 `org_6yvoRRCkzk3
 
 ## 用户应用
 
-- 网站 `eastmoney` 使用授权码 + PKCE。统一 MCP portal 使用逐用户 OAuth。两者必须在 Eastmoney 组织登录，Gateway 校验签名 token 的 `org_id`，不接受调用方覆盖网站的组织参数。
+- 网站 `eastmoney` 与直连 MCP 均使用授权码 + PKCE。MCP 复用专用 public client `M1a5PF3UJaFIZv1k4HO4IV06Z5fXQBHV`，token endpoint auth method 为 `none`，Auth0 原生 `post_login_prompt` 选择组织，refresh token 轮换。两者必须在 Eastmoney 组织登录，Gateway 校验签名 token 的 `org_id`，MCP client 不能访问普通业务 REST。
 - 登录 Action 只处理网站和 MCP 客户端，校验组织、`eastmoney-email` 连接、`18.cn` 邮箱及账号状态。基础角色通过组织成员关系分配，当前登录 Action 不自动分配。角色权限由 Auth0 管理，Gateway 按已验证角色读取授权缓存。
 - 专用 `eastmoney-email` 连接只关联网站和 MCP 用户应用。Google 和默认密码连接保留其他业务应用，不为组织隔离修改其共享配置。
 - `eastmoney gateway management` 机器应用供 Gateway 身份服务和注册资料保存。角色准入使用 JWT 声明及授权缓存。本地租户管理通过 Auth0 skill 和已有 CLI 授权完成。不得把 CLI 管理授权并入业务运行时凭据。旧 profile 应用仅供可逆回退，不再参与当前身份服务。
