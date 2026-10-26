@@ -2,9 +2,9 @@
 
 Auth0 的本站应用 `eastmoney` 使用自定义登录域 `auth.hasbai.xyz`。管理 API 使用原租户域 `hasbai.eu.auth0.com`。Dashboard 客户端拥有 `/auth/login`、`/auth/callback` 和退出页面，Auth0 SPA SDK 执行 PKCE，Gateway 只验签及授权，Auth0 API audience 为 `https://eastmoney.hasbai.xyz/`。API 不接受 ID token 或 Cloudflare Access JWT。
 
-当前 post-login 绑定为注册资料 Action 和 `login claims`（`35884b07-e1f4-4ab8-b66c-0325d5a055e4`）。后者添加顶层 `username`、`email`、`role` 字符串、`_roles` 角色名称数组，以及本站组织可选的 `department`、`picture`。拒绝封禁账号和未验证邮箱。`role` 供数据库使用，不用于 Gateway 业务授权。`_roles` 在 Gateway 按组织权限缓存解析为角色 ID。Gateway 接收 `Authorization: Bearer` 中的 Auth0 原始签名 token，`sub` 使用 Auth0 原生主键。
+当前 `login claims` 源码为 `actions/login-claims.cjs`。post-login 绑定为注册资料 Action 和 `login claims`（`35884b07-e1f4-4ab8-b66c-0325d5a055e4`）。后者添加顶层 `username`、`email`、`role` 字符串、`_roles` 角色名称数组，以及本站组织可选的 `department`、`picture`。拒绝封禁账号和未验证邮箱。`role` 供数据库使用，不用于 Gateway 业务授权。`_roles` 在 Gateway 按组织权限缓存解析为角色 ID。Gateway 接收 `Authorization: Bearer` 中的 Auth0 原始签名 token，`sub` 使用 Auth0 原生主键。
 
-`actions/eastmoney-login.cjs` 和 `scripts/publish-login-claims.mjs` 保留旧 nested `user` 协议的历史实现。不要重新发布或恢复旧绑定。旧 nested `user` 和 URL namespace token 一律拒绝。基础角色由 Auth0 成员关系管理，当前 Action 不自动分配。
+`actions/eastmoney-login.cjs` 和 `scripts/publish-login-claims.mjs` 保留旧 nested `user` 协议的历史实现。不要重新发布或恢复旧绑定。网站拒绝旧 nested `user` 和旧 URL namespace token。官方 ChatGPT/Codex MCP 客户端仅在 `/api/mcp` 使用签名 `https://eastmoney.hasbai.xyz/identity`，无顶层字段回退；精确 CIMD 配置见 [MCP](../docs/MCP.md)。基础角色由 Auth0 成员关系管理，当前 Action 不自动分配。
 
 其余注册 Action、中文主题、Hosted Form 与提示文案保留原业务流程。`eastmoney-signup-profile` 仍只处理新账号 pending 标记。姓名和部门不会授予权限或自动关联业务负责人。
 
