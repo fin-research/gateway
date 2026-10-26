@@ -72,15 +72,15 @@ test('Dashboard MCP discovers Auth0 OAuth from an unauthenticated challenge', as
   assert.equal(other.headers.get('WWW-Authenticate'), 'Bearer realm="eastmoney"');
 });
 
-test('portal Auth0 tokens authorize Data MCP only and cannot become Dashboard or general API users', async t => {
-  const f = await fixture(t); f.env.AUTH0_MCP_CLIENT_ID = 'portal';
+test('retired portal Auth0 tokens cannot authorize Data MCP or ordinary API users', async t => {
+  const f = await fixture(t);
   const token = await f.signed({ azp: 'portal' });
   const request = path => f.request(path, { token, method: 'POST', body: '{}' });
-  assert.equal((await gatewayRequest(request('/data/mcp'), f.env)).status, 200);
+  assert.equal((await gatewayRequest(request('/data/mcp'), f.env)).status, 403);
   for (const path of ['/api/profile', '/data/choice/css', '/data/graphql', '/data/camel']) {
     assert.equal((await gatewayRequest(request(path), f.env)).status, path === '/data/graphql' ? 200 : 403);
   }
   f.updateProfile({ blocked: true });
-  assert.equal((await gatewayRequest(request('/data/mcp'), f.env)).status, 200);
+  assert.equal((await gatewayRequest(request('/data/mcp'), f.env)).status, 403);
   assert.equal(f.calls.auth0.length,0);
 });

@@ -3,6 +3,7 @@ import test from 'node:test';
 import { gatewayRequest } from '../src/app.ts';
 import { identityService } from '../src/identity-service.ts';
 import { fixture } from './helpers/fixture.mjs';
+import { mcpClientIds, mcpIdentityClaim } from '../src/mcp-auth.ts';
 import { CONTEXT_HEADER } from '../src/forward.ts';
 
 async function context(f) {
@@ -12,11 +13,11 @@ async function context(f) {
 }
 function bridge(path,ctx,method='POST',body,headers={}) { return new Request('https://identity.internal'+path,{method,headers:{[CONTEXT_HEADER]:ctx,'Content-Type':'application/json',...headers},body}); }
 
-test('Dashboard MCP accepts only site/portal user JWTs, validates identity before CSRF and strips credentials',async t=>{
-  const f=await fixture(t);f.env.AUTH0_MCP_CLIENT_ID='portal';
+test('Dashboard MCP accepts only site/CIMD user JWTs, validates identity before CSRF and strips credentials',async t=>{
+  const f=await fixture(t);
   const request=(token,headers={})=>new Request(f.env.SITE_ORIGIN+'/api/mcp',{method:'POST',headers:{...(token?{Authorization:'Bearer '+token}:{}),...headers},body:'{}'});
   assert.equal((await gatewayRequest(request(),f.env)).status,401);
-  const token=await f.signed({azp:'portal'});
+  const token=await f.signed({azp:mcpClientIds[0],[mcpIdentityClaim]:f.flatClaims,email:undefined});
   assert.equal((await gatewayRequest(request(token),f.env)).status,200);
   assert.equal(f.calls.dashboard[0].headers.has('Authorization'),false);
   assert.equal((await gatewayRequest(request(token,{Origin:'https://evil.test'}),f.env)).status,403);
@@ -24,6 +25,22 @@ test('Dashboard MCP accepts only site/portal user JWTs, validates identity befor
   assert.equal((await gatewayRequest(request(machine),f.env)).status,403);
   assert.equal((await gatewayRequest(new Request(f.env.SITE_ORIGIN+'/api/mcp',{method:'POST',headers:{Authorization:'Bearer '+await f.signed(),Origin:'https://evil.test'},body:'{}'}),f.env)).status,403);
   for(const path of ['/api/credit','/api/profile','/financing/projects']) assert.equal((await gatewayRequest(f.request(path,{token}),f.env)).status,403,path);
+});
+test('CIMD identities require exact clients and their signed namespace, with no legacy fallback',async t=>{
+  const f=await fixture(t);
+  const request=token=>new Request(f.env.SITE_ORIGIN+'/api/mcp',{method:'POST',headers:{Authorization:'Bearer '+token},body:'{}'});
+  for(const azp of mcpClientIds){
+    const token=await f.signed({azp,[mcpIdentityClaim]:f.flatClaims,email:undefined});
+    assert.equal((await gatewayRequest(request(token),f.env)).status,200);
+    for(const path of ['/api/profile','/data/mcp','/data/choice/css'])assert.equal((await gatewayRequest(f.request(path,{token}),f.env)).status,403,path);
+    assert.equal((await gatewayRequest(request(await f.signed({azp})),f.env)).status,401);
+    for(const identity of [{...f.flatClaims,email:'test@example.com'},{...f.flatClaims,email:undefined},{...f.flatClaims,_roles:['unknown']}]){
+      assert.ok([401,403].includes((await gatewayRequest(request(await f.signed({azp,[mcpIdentityClaim]:identity})),f.env)).status));
+    }
+    assert.equal((await gatewayRequest(request(await f.signed({azp,[mcpIdentityClaim]:f.flatClaims,org_id:'org_Other'})),f.env)).status,401);
+  }
+  for(const azp of ['M1a5PF3UJaFIZv1k4HO4IV06Z5fXQBHV','https://chatgpt.com/oauth/unknown/client.json','https://chatgpt.com.evil.test/oauth/client.json'])
+    assert.equal((await gatewayRequest(request(await f.signed({azp,[mcpIdentityClaim]:f.flatClaims})),f.env)).status,403);
 });
 test('private MCP policies and dispatch enforce fresh real-route permission and named action',async t=>{
   const f=await fixture(t);const ctx=await context(f);

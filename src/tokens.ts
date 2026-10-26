@@ -9,7 +9,7 @@ const userClaimSchema = z.object({
 });
 
 /** Only the current top-level Auth0 claims are accepted, after JWT verification. */
-export function userClaims(payload: JWTPayload): z.infer<typeof userClaimSchema> {
+export function userClaims(payload: unknown): z.infer<typeof userClaimSchema> {
   const claims = userClaimSchema.safeParse(payload);
   if (!claims.success || new Set(claims.data._roles).size !== claims.data._roles.length)
     throw new AccessError(401, '登录凭证需更新，请重新登录', 'TOKEN_REFRESH_REQUIRED');

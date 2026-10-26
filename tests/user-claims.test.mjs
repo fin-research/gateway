@@ -109,9 +109,8 @@ test('flat credit role names require the current organization role and disappear
 
 test('flat claims preserve MCP client isolation and fail closed when permission cache is unavailable', async t => {
   const f = await fixture(t);
-  f.env.AUTH0_MCP_CLIENT_ID = 'mcp';
-  const token = await f.signed({ ...f.flatClaims, azp: 'mcp' });
-  assert.equal((await gatewayRequest(f.request('/data/mcp', { token }), f.env)).status, 200);
+  const token = await f.signed({ azp: 'https://chatgpt.com/oauth/codex/client.json', 'https://eastmoney.hasbai.xyz/identity': f.flatClaims, email: undefined });
+  assert.equal((await gatewayRequest(f.request('/data/mcp', { token }), f.env)).status, 403);
   assert.equal((await gatewayRequest(f.request('/data/choice/css', { token }), f.env)).status, 403);
   await authorizeRequest(f.request('/api/mcp', { token }), f.env, '/api/mcp');
   globalThis.caches = { open: async () => ({ match: async () => undefined, put: async () => {} }) };

@@ -54,7 +54,7 @@ Dashboard 在 SvelteKit client init 中处理 callback、恢复 token 并安装�
 
 当前本地租户管理按[共享 AUTH](../../eastmoney/docs/AUTH.md#auth0-本地租户管理) 使用 Auth0 skill 和 `auth0` CLI：先检查现有授权，再读取目标资源、执行精确变更并回读。`scripts/prepare-gateway-tenant.mjs` 是初次迁移时从受限导出生成配置的历史脚本，不应重跑以覆盖现有角色、成员、注册 Form 或迁移账号例外。
 
-线上登录声明以当前已绑定、已部署的 `login claims` Action 为准。通过 Auth0 CLI 读取绑定与 deployed version 核对。`auth0/actions/eastmoney-login.cjs` 和 `scripts/publish-login-claims.mjs` 是旧 nested `user` 协议的历史实现，不能重新发布或恢复旧绑定。基础角色由 Auth0 成员关系管理，当前通用 Action 不自动分配角色。Gateway 身份服务与注册资料 Action 仍使用 `eastmoney gateway management` 应用，配置见 `auth0/gateway-management-client.yaml`。
+线上登录声明以当前已绑定、已部署的 `login claims` Action 为准，当前源码为 `auth0/actions/login-claims.cjs`，MCP 签名身份与 CIMD 配置见 [MCP](MCP.md)。通过 Auth0 CLI 读取绑定与 deployed version 核对。`auth0/actions/eastmoney-login.cjs` 和 `scripts/publish-login-claims.mjs` 是旧 nested `user` 协议的历史实现，不能重新发布或恢复旧绑定。基础角色由 Auth0 成员关系管理，当前通用 Action 不自动分配角色。Gateway 身份服务与注册资料 Action 仍使用 `eastmoney gateway management` 应用，配置见 `auth0/gateway-management-client.yaml`。
 
 ## 生产交付
 
