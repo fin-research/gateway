@@ -59,7 +59,7 @@ test('Dashboard MCP discovers Auth0 OAuth from an unauthenticated challenge', as
     assert.deepEqual(await response.json(), {
       resource: f.env.SITE_ORIGIN + '/', resource_name: 'Eastmoney',
       authorization_servers: [`https://${f.env.AUTH0_LOGIN_DOMAIN}/`],
-      scopes_supported: ['openid', 'profile', 'email', 'offline_access'], bearer_methods_supported: ['header'],
+      scopes_supported: ['offline_access'], bearer_methods_supported: ['header'],
     });
   }
   for (const token of [undefined, 'invalid']) {
