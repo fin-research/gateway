@@ -95,7 +95,11 @@ async function rpc(token, method, params = {}) {
   assert.ok(!value.error); return value.result;
 }
 const tools = await rpc(tokens.access_token, 'tools/list'); assert.equal(tools.tools.length, 37);
-for (const name of ['commentaries', 'credit_report', 'chinamoney_shibor']) assert.ok(!(await rpc(tokens.access_token, 'tools/call', { name, arguments: {} })).isError);
+for (const name of ['commentaries', 'credit_report', 'chinamoney_shibor', 'cfets', 'trading_days']) {
+  const result = await rpc(tokens.access_token, 'tools/call', { name, arguments: {} });
+  assert.ok(!result.isError, `${name} read failed`);
+}
+assert.equal((await rpc(tokens.access_token, 'tools/call', { name: 'choice_css', arguments: {} })).isError, true);
 for (const path of ['/api/profile', '/data/choice/css']) {
   const response = await fetch(site + path, { headers: { Authorization: 'Bearer ' + tokens.access_token } });
   assert.equal(response.status, 403, path); await response.body?.cancel();
@@ -111,5 +115,5 @@ await checkIdentity(refreshed.access_token); assert.equal((await rpc(refreshed.a
 const chatgpt = await authorize(mcpClientIds[0], chatgptRedirect);
 assert.ok(!chatgpt.callback.has('error')); assert.ok(chatgpt.callback.get('code'));
 console.log({ discovery: true, cimd: true, issuerSuccessAndError: true, pkce: true, signedIdentity: true, refreshRotation: true,
-  tools: tools.tools.length, commentaryRead: true, maskedCreditRead: true, dataRead: true, retiredEndpoints: true, ordinaryRestAndDataRejected: true,
+  tools: tools.tools.length, commentaryRead: true, maskedCreditRead: true, dataRead: true, dmRead: true, choiceCalendarRead: true, invalidChoiceRejected: true, retiredEndpoints: true, ordinaryRestAndDataRejected: true,
   chatgptAuthorization: true, chatgptPrivateKeyExchange: 'requires ChatGPT host', browserUsed: false });
