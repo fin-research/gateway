@@ -1,4 +1,4 @@
-export const mcpClientIds: readonly string[] = ['https://chatgpt.com/oauth/client.json', 'https://chatgpt.com/oauth/codex/client.json'];
+export const mcpClientIds: readonly string[] = ['https://chatgpt.com/oauth/client.json', 'https://chatgpt.com/oauth/codex/client.json', 'https://opencode.ai/oauth/opencode/client.json'];
 export const mcpIdentityClaim = 'https://eastmoney.hasbai.xyz/identity';
 
 /** OAuth discovery only. Auth0 owns login, authorization codes and tokens. */

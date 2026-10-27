@@ -12,7 +12,7 @@ async function run(clientId,changes={}){
   return {claims,denials};
 }
 test('CIMD Action issues identity only from verified organization accounts, including refresh logins',async()=>{
-  for(const id of ['tpc_a7WD9gnnwfLwzjTcG3aN8m','tpc_2WkMuCZoYq49waTvQZjJHK']){
+  for(const id of ['tpc_a7WD9gnnwfLwzjTcG3aN8m','tpc_2WkMuCZoYq49waTvQZjJHK','tpc_mJaDePAHohZSgFrpLBfWny']){
     for(const protocol of ['oidc-basic-profile','oauth2-refresh-token']){
       const result=await run(id,{transaction:{protocol}});assert.equal(result.denials.length,0);
       assert.deepEqual(JSON.parse(JSON.stringify(result.claims[mcpIdentityClaim])),{username:'测试',email:'test@18.cn',role:'authenticated',_roles:['authenticated'],department:'研究',picture:''});

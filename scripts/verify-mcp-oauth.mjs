@@ -11,13 +11,19 @@ const config = await readAuthTestConfig();
 const cookies = new SessionCookies();
 const codexRedirect = 'http://127.0.0.1:53682/callback';
 const chatgptRedirect = 'https://chatgpt.com/connector_platform_oauth_redirect';
+const clientId = process.env.MCP_OAUTH_CLIENT_ID ?? mcpClientIds[1];
+const clientRedirect = process.env.MCP_OAUTH_REDIRECT_URI ?? codexRedirect;
+assert.ok(mcpClientIds.includes(clientId), 'Use a registered MCP client');
+const errorRedirect = clientId !== 'https://opencode.ai/oauth/opencode/client.json';
+const callback = new URL(clientRedirect);
+assert.ok(['127.0.0.1', 'localhost'].includes(callback.hostname) && callback.protocol === 'http:' && !callback.username && !callback.password);
 
 // Never fetch client callbacks. Credentials and cookies stay on the Auth0 origin.
 async function request(target, options = {}) {
   let url = new URL(target), method = options.method ?? 'GET', body = options.body;
   for (let hop = 0; hop < 16; hop++) {
     if (url.origin !== auth) {
-      assert.ok([codexRedirect, chatgptRedirect].some(callback => url.origin + url.pathname === callback));
+      assert.ok([clientRedirect, chatgptRedirect].some(callback => url.origin + url.pathname === callback));
       return { url, status: 302, text: '' };
     }
     const headers = new Headers({ Accept: 'text/html', Cookie: cookies.header(url) });
@@ -69,21 +75,25 @@ async function authorize(client, redirect, extra = {}) {
   return { callback: response.url.searchParams, verifier };
 }
 // The error callback must identify the issuer too; this request sends no credentials.
-const errorFlow = await authorize(mcpClientIds[1], codexRedirect, { prompt: 'none' });
-assert.equal(errorFlow.callback.get('error'), 'login_required');
-const flow = await authorize(mcpClientIds[1], codexRedirect);
+// Existing trusted clients return issuer-bearing errors; OpenCode retains
+// Auth0's default open redirect protection. Success always checks issuer/state.
+if (errorRedirect) {
+  const errorFlow = await authorize(clientId, clientRedirect, { prompt: 'none' });
+  assert.equal(errorFlow.callback.get('error'), 'login_required');
+}
+const flow = await authorize(clientId, clientRedirect);
 assert.ok(!flow.callback.has('error')); assert.ok(flow.callback.get('code'));
 async function exchange(values) {
   const response = await request(discovery.token_endpoint, { method: 'POST', body: new URLSearchParams(values).toString() });
   assert.equal(response.status, 200, 'OAuth token exchange failed'); return JSON.parse(response.text);
 }
-const tokens = await exchange({ grant_type: 'authorization_code', client_id: mcpClientIds[1], redirect_uri: codexRedirect,
+const tokens = await exchange({ grant_type: 'authorization_code', client_id: clientId, redirect_uri: clientRedirect,
   resource: metadata.resource, code: flow.callback.get('code'), code_verifier: flow.verifier });
 const env = { AUTH0_LOGIN_DOMAIN: 'auth.hasbai.xyz', AUTH0_AUDIENCE: site + '/', AUTH0_CLIENT_ID: '16vMxoYpr5AdPRiW1PkwIiHuRWszii6m',
   AUTH0_ORGANIZATION_ID: 'org_6yvoRRCkzk3eGkBS', AUTH0_MACHINE_CLIENT_IDS: '' };
 const keys = createRemoteJWKSet(new URL(discovery.jwks_uri), { [customFetch]: fetch });
 async function checkIdentity(token) {
-  const payload = await verifyToken(token, env, 'access', keys); assert.equal(payload.azp, mcpClientIds[1]);
+  const payload = await verifyToken(token, env, 'access', keys); assert.equal(payload.azp, clientId);
   assert.equal(userClaims(payload[mcpIdentityClaim]).email, config.email); return payload;
 }
 await checkIdentity(tokens.access_token); assert.ok(tokens.refresh_token);
@@ -128,13 +138,13 @@ for (const path of ['/api/profile', '/data/choice/css']) {
 for (const path of ['/api/mcp', '/data/mcp']) {
   const response = await fetch(site + path); assert.equal(response.status, 410, path); await response.body?.cancel();
 }
-const refreshed = await exchange({ grant_type: 'refresh_token', client_id: mcpClientIds[1], resource: metadata.resource, refresh_token: tokens.refresh_token });
+const refreshed = await exchange({ grant_type: 'refresh_token', client_id: clientId, resource: metadata.resource, refresh_token: tokens.refresh_token });
 assert.ok(refreshed.refresh_token); assert.notEqual(refreshed.refresh_token, tokens.refresh_token);
 await checkIdentity(refreshed.access_token); assert.equal((await rpc(refreshed.access_token, 'tools/list')).tools.length, 38);
 // Auth0 can authorize ChatGPT's real metadata and exact callback. Its private-key
 // assertion is held by ChatGPT, so the host must perform that final exchange.
 const chatgpt = await authorize(mcpClientIds[0], chatgptRedirect);
 assert.ok(!chatgpt.callback.has('error')); assert.ok(chatgpt.callback.get('code'));
-console.log({ discovery: true, cimd: true, issuerSuccessAndError: true, pkce: true, signedIdentity: true, refreshRotation: true,
+console.log({ discovery: true, cimd: true, clientId, issuerSuccess: true, issuerError: errorRedirect, pkce: true, signedIdentity: true, refreshRotation: true,
   tools: tools.tools.length, commentaryRead: true, maskedCreditRead: true, bondLedgerRead: true, bondLedgerQuery: ledgerQuery, dataRead: true, dmRead: true, choiceCalendarRead: true, invalidChoiceRejected: true, retiredEndpoints: true, ordinaryRestAndDataRejected: true,
   chatgptAuthorization: true, chatgptPrivateKeyExchange: 'requires ChatGPT host', browserUsed: false });

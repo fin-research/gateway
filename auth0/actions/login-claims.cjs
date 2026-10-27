@@ -22,7 +22,7 @@ exports.onExecutePostLogin = async (event, api) => {
   if (event.connection?.name?.includes('email') && !event.user.email_verified) {
     return api.access.deny('请先验证注册邮箱，再返回登录');
   };
-  if (['tpc_a7WD9gnnwfLwzjTcG3aN8m', 'tpc_2WkMuCZoYq49waTvQZjJHK'].includes(event.client.client_id)) {
+  if (['tpc_a7WD9gnnwfLwzjTcG3aN8m', 'tpc_2WkMuCZoYq49waTvQZjJHK', 'tpc_mJaDePAHohZSgFrpLBfWny'].includes(event.client.client_id)) {
     if (event.organization?.id !== EM_ORGANIZATION_ID || event.connection?.name !== 'eastmoney-email'
       || !event.user.email_verified || !/^[^@\s]+@18\.cn$/i.test(event.user.email ?? '')) {
       return api.access.deny('请使用东方财富组织的已验证 18.cn 账号登录');
