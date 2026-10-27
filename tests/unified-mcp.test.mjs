@@ -18,7 +18,7 @@ function applications(f){
     if(owner==='data'&&failData)return new Response('sensitive upstream failure',{status:503});
     let result;
     if(message.method==='tools/list'){
-      const names=owner==='dashboard'?['news',...(context.user.authorization.permissions.includes('credit.institution:read')?['credit_report']:[]),'create_commentary','generate_market_focus']:['omo','news_list','choice_css','health','camel_borrowings'];
+      const names=owner==='dashboard'?['news',...(context.user.authorization.permissions.includes('credit.institution:read')?['credit_report']:[]),...(context.user.authorization.permissions.includes('bond.ledger:read')?['bond_ledger']:[]),'create_commentary','generate_market_focus']:['omo','news_list','choice_css','health','camel_borrowings'];
       if(duplicate&&owner==='data')names.push('omo');
       result={tools:names.map(tool)};
     } else result=writeError&&message.params.name==='create_commentary'?{isError:true,content:[{type:'text',text:'版本冲突'}]}:{content:[{type:'text',text:message.params.name}],structuredContent:{data:{owner,name:message.params.name}}};
@@ -45,16 +45,16 @@ test('Gateway owns modern/legacy MCP handshake without invoking applications',as
 test('Gateway merges reviewed definitions, preserves schemas and does not cache another user permissions',async t=>{
   const f=await fixture(t);applications(f);
   const list=await rpc(f,'tools/list');assert.equal(list.value.id,17);
-  assert.deepEqual(list.value.result.tools.map(t=>t.name),['news','credit_report','create_commentary','omo','news_list','choice_css']);
+  assert.deepEqual(list.value.result.tools.map(t=>t.name),['news','credit_report','bond_ledger','create_commentary','omo','news_list','choice_css']);
   assert.deepEqual(list.value.result.tools[0].inputSchema,tool('news').inputSchema);
   assert.equal(list.response.headers.get('Cache-Control'),'no-store, private');
   await f.updateGrants([]);
-  assert.ok(!(await rpc(f,'tools/list')).value.result.tools.some(t=>t.name==='credit_report'));
+  assert.ok(!(await rpc(f,'tools/list')).value.result.tools.some(t=>['credit_report','bond_ledger'].includes(t.name)));
   assert.equal(f.calls.dashboard.length,2);assert.equal(f.calls.data.length,2);
 });
 test('single calls only reach their owner, keep structured errors and never retry writes',async t=>{
   const f=await fixture(t);const app=applications(f);
-  for(const [name,owner] of [['credit_report','dashboard'],['news','dashboard'],['news_list','data'],['omo','data'],['choice_css','data']]){
+  for(const [name,owner] of [['bond_ledger','dashboard'],['credit_report','dashboard'],['news','dashboard'],['news_list','data'],['omo','data'],['choice_css','data']]){
     const before={dashboard:f.calls.dashboard.length,data:f.calls.data.length};
     const result=await rpc(f,'tools/call',{name,arguments:{}});
     assert.deepEqual(result.value.result.structuredContent,{data:{owner,name}});
@@ -67,7 +67,7 @@ test('single calls only reach their owner, keep structured errors and never retr
 });
 test('unpublished names never reach bindings; failed or duplicate catalogs are rejected',async t=>{
   const f=await fixture(t);const app=applications(f);
-  for(const name of ['health','config','stock_summary','generate_market_focus','dashboard_credit_report','data_news','camel_borrowings'])assert.ok((await rpc(f,'tools/call',{name,arguments:{}})).value.error);
+  for(const name of ['health','config','stock_summary','generate_market_focus','dashboard_credit_report','data_news','camel_borrowings','generate_bond_report','download_bond_report','update_bond_ledger'])assert.ok((await rpc(f,'tools/call',{name,arguments:{}})).value.error);
   assert.equal(f.calls.dashboard.length+f.calls.data.length,0);
   assert.ok((await rpc(f,'tools/list',{cursor:'unknown'})).value.error);
   app.duplicate();assert.ok((await rpc(f,'tools/list')).value.error);

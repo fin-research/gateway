@@ -123,7 +123,7 @@ async function main() {
     await rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'eastmoney-verification', version: '1' } });
     const list = await rpc('tools/list', {});
     const names = list.tools.map(tool => tool.name);
-    const expected = 37;
+    const expected = 38;
     if (names.length !== expected) failures.push(`${path} tool count: expected ${expected}, got ${names.length}`);
     const call = await rpc('tools/call', { name: 'chinamoney_shibor', arguments: {} });
     if (call.isError) failures.push(`${path} market data`);
