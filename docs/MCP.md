@@ -14,7 +14,7 @@ ChatGPT 新建 OAuth 连接只填写上述 MCP URL，高级 OAuth 设置留空�
 
 Auth0 第三方 access token 会过滤保留字段 `email`；当前 `auth0/actions/login-claims.cjs` 对两个内部客户端 ID 写入签名的 `https://eastmoney.hasbai.xyz/identity`，校验组织、连接、18.cn 和邮箱验证。Gateway 仅在 `/mcp` 按两精确外部 `azp` 读取该身份，无顶层字段回退。网站仍使用原顶层声明。旧固定 MCP client 不再接受，新 CIMD 不准入普通 REST 或 `/data/mcp`。
 
-程序化验收：`AUTH_TEST_ENV_FILE=<项目组.env> node --use-env-proxy scripts/verify-mcp-oauth.mjs`，覆盖发现、CIMD、成功/错误 issuer、真实账号 PKCE、签名身份、刷新、38工具及只读调用、普通 REST/Data 拒绝。二级池先读取可用日期，再查询当前年度可用区间；设置 `MCP_EVIDENCE_DIR` 可保存目录和二级池业务回包，不保存身份或凭据。ChatGPT private-key exchange 须由 ChatGPT 主机完成，HTTP 脚本仅验证其真实授权与回调。
+程序化验收：`AUTH_TEST_ENV_FILE=<项目组.env> node --use-env-proxy scripts/verify-mcp-oauth.mjs`，覆盖发现、CIMD、成功/错误 issuer、真实账号 PKCE、签名身份、刷新、38工具及只读调用、普通 REST/Data 拒绝。二级池先读取可用日期，再以上海当日为 asOf 查询当年1月1日至当年最新可用台账日（无当年数据时截止 asOf）；设置 `MCP_EVIDENCE_DIR` 可保存目录和二级池业务回包，不保存身份或凭据。ChatGPT private-key exchange 须由 ChatGPT 主机完成，HTTP 脚本仅验证其真实授权与回调。
 
 标准点评统一为 `/api/commentaries`，读权限为 `research.policy:read`，人工写入保留既有 `research.policy_commentary:update`。旧 tracking 与政策点评接口移除，无别名。MCP 只提供已审核业务数据与人工操作，不发布 AI 生成工具；网站显式生成继续受原权限约束。
 
