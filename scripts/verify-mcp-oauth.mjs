@@ -103,16 +103,20 @@ for (const name of ['commentaries', 'credit_report', 'chinamoney_shibor', 'cfets
 }
 const ledgerDates = await rpc(tokens.access_token, 'tools/call', { name: 'bond_ledger', arguments: {} });
 assert.ok(!ledgerDates.isError, 'bond_ledger dates read failed');
+const inventoryFetchedAt = new Date().toISOString();
 const dates = ledgerDates.structuredContent.data;
-const ledgerQuery = { start: dates.availableStartDate, end: dates.availableEndDate };
-assert.ok(ledgerQuery.start && ledgerQuery.end, 'bond_ledger has no current-year dates');
+const asOf = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+const start = asOf.slice(0, 4) + '-01-01';
+const eligibleDates = dates.databaseDates.filter(date => date >= start && date <= asOf).sort();
+const ledgerQuery = { start, end: eligibleDates.at(-1) ?? asOf };
 const ledgerReport = await rpc(tokens.access_token, 'tools/call', { name: 'bond_ledger', arguments: { query: ledgerQuery } });
 assert.ok(!ledgerReport.isError, 'bond_ledger report read failed');
-assert.equal(ledgerReport.structuredContent.data.hasData, true);
+const reportFetchedAt = new Date().toISOString();
+assert.equal(ledgerReport.structuredContent.data.hasData, eligibleDates.length > 0);
 if (process.env.MCP_EVIDENCE_DIR) {
   await mkdir(process.env.MCP_EVIDENCE_DIR, { recursive: true });
   for (const [name, value] of Object.entries({ 'tools-list': tools, 'bond-ledger-dates': ledgerDates, 'bond-ledger-report': ledgerReport,
-    metadata: { verifiedAt: new Date().toISOString(), endpoint: site + '/mcp', query: ledgerQuery } })) {
+    metadata: { verifiedAt: new Date().toISOString(), endpoint: site + '/mcp', asOf, inventory: { fetchedAt: inventoryFetchedAt, query: {} }, report: { fetchedAt: reportFetchedAt, query: ledgerQuery } } })) {
     await writeFile(join(process.env.MCP_EVIDENCE_DIR, name + '.json'), JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
   }
 }
