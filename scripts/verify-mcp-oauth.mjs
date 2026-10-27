@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createRemoteJWKSet, customFetch } from 'jose';
 import { SessionCookies, parseLoginPage, readAuthTestConfig, boundedText } from './lib/programmatic-login.mjs';
 import { verifyToken, userClaims } from '../src/tokens.ts';
@@ -94,10 +96,25 @@ async function rpc(token, method, params = {}) {
     ? raw.split('\n').filter(line => line.startsWith('data: ')).map(line => JSON.parse(line.slice(6))).find(value => value.id === 1) : JSON.parse(raw);
   assert.ok(!value.error); return value.result;
 }
-const tools = await rpc(tokens.access_token, 'tools/list'); assert.equal(tools.tools.length, 37);
+const tools = await rpc(tokens.access_token, 'tools/list'); assert.equal(tools.tools.length, 38);
 for (const name of ['commentaries', 'credit_report', 'chinamoney_shibor', 'cfets', 'trading_days']) {
   const result = await rpc(tokens.access_token, 'tools/call', { name, arguments: {} });
   assert.ok(!result.isError, `${name} read failed`);
+}
+const ledgerDates = await rpc(tokens.access_token, 'tools/call', { name: 'bond_ledger', arguments: {} });
+assert.ok(!ledgerDates.isError, 'bond_ledger dates read failed');
+const dates = ledgerDates.structuredContent.data;
+const ledgerQuery = { start: dates.availableStartDate, end: dates.availableEndDate };
+assert.ok(ledgerQuery.start && ledgerQuery.end, 'bond_ledger has no current-year dates');
+const ledgerReport = await rpc(tokens.access_token, 'tools/call', { name: 'bond_ledger', arguments: { query: ledgerQuery } });
+assert.ok(!ledgerReport.isError, 'bond_ledger report read failed');
+assert.equal(ledgerReport.structuredContent.data.hasData, true);
+if (process.env.MCP_EVIDENCE_DIR) {
+  await mkdir(process.env.MCP_EVIDENCE_DIR, { recursive: true });
+  for (const [name, value] of Object.entries({ 'tools-list': tools, 'bond-ledger-dates': ledgerDates, 'bond-ledger-report': ledgerReport,
+    metadata: { verifiedAt: new Date().toISOString(), endpoint: site + '/mcp', query: ledgerQuery } })) {
+    await writeFile(join(process.env.MCP_EVIDENCE_DIR, name + '.json'), JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
+  }
 }
 assert.equal((await rpc(tokens.access_token, 'tools/call', { name: 'choice_css', arguments: {} })).isError, true);
 for (const path of ['/api/profile', '/data/choice/css']) {
@@ -109,11 +126,11 @@ for (const path of ['/api/mcp', '/data/mcp']) {
 }
 const refreshed = await exchange({ grant_type: 'refresh_token', client_id: mcpClientIds[1], resource: metadata.resource, refresh_token: tokens.refresh_token });
 assert.ok(refreshed.refresh_token); assert.notEqual(refreshed.refresh_token, tokens.refresh_token);
-await checkIdentity(refreshed.access_token); assert.equal((await rpc(refreshed.access_token, 'tools/list')).tools.length, 37);
+await checkIdentity(refreshed.access_token); assert.equal((await rpc(refreshed.access_token, 'tools/list')).tools.length, 38);
 // Auth0 can authorize ChatGPT's real metadata and exact callback. Its private-key
 // assertion is held by ChatGPT, so the host must perform that final exchange.
 const chatgpt = await authorize(mcpClientIds[0], chatgptRedirect);
 assert.ok(!chatgpt.callback.has('error')); assert.ok(chatgpt.callback.get('code'));
 console.log({ discovery: true, cimd: true, issuerSuccessAndError: true, pkce: true, signedIdentity: true, refreshRotation: true,
-  tools: tools.tools.length, commentaryRead: true, maskedCreditRead: true, dataRead: true, dmRead: true, choiceCalendarRead: true, invalidChoiceRejected: true, retiredEndpoints: true, ordinaryRestAndDataRejected: true,
+  tools: tools.tools.length, commentaryRead: true, maskedCreditRead: true, bondLedgerRead: true, bondLedgerQuery: ledgerQuery, dataRead: true, dmRead: true, choiceCalendarRead: true, invalidChoiceRejected: true, retiredEndpoints: true, ordinaryRestAndDataRejected: true,
   chatgptAuthorization: true, chatgptPrivateKeyExchange: 'requires ChatGPT host', browserUsed: false });
