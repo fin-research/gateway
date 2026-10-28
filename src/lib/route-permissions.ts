@@ -22,6 +22,7 @@ export const ROUTE_PERMISSIONS: Record<string, Methods> = {
   '/api/commentaries/[id]/pdf': { GET: 'research.policy:read', POST: 'research.policy_commentary:update' },
   '/api/commentaries/[id]/revisions': { GET: 'research.policy:read' },
   '/api/policies': { GET: 'research.policy:read' },
+  '/api/research/search': { POST: 'research.article:read' },
   '/api/policies/articles': { GET: 'research.policy:read' },
   '/api/policies/[id]/articles': { PUT: 'research.policy:update' },
   '/articles/[id]': { GET: 'research.article:read' }, '/api/articles/[id]': { GET: 'research.article:read' },

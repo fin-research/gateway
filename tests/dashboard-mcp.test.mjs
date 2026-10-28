@@ -79,3 +79,15 @@ test('canonical commentary routes share the policy boundary and reject retired w
   for(const path of ['/api/commentaries','/api/commentaries/c','/api/commentaries/c/revisions','/api/commentaries/c/pdf'])assert.equal((await gatewayRequest(f.request(path,{token}),f.env)).status,200,path);
   for(const [path,method] of [['/api/tracking-commentaries','GET'],['/api/tracking-commentaries/c','PUT'],['/api/policies/p/commentary','PUT'],['/api/policies/p/commentary','POST']])assert.equal((await gatewayRequest(f.request(path,{token,method,body:method==='GET'?undefined:'{}'}),f.env)).status,403,path);
 });
+
+test('research search requires article read and dispatch rechecks revocation',async t=>{
+  const f=await fixture(t);const ctx=await context(f);
+  const request=()=>bridge('/mcp/dispatch?target=%2Fapi%2Fresearch%2Fsearch',ctx,'POST',JSON.stringify({query:'央行'}));
+  await f.updateGrants(['research.article:read']);
+  assert.equal((await identityService(request(),f.env)).status,200);
+  const forwarded=f.calls.dashboard.at(-1);
+  assert.equal(new URL(forwarded.url).pathname,'/api/research/search');
+  assert.deepEqual(await forwarded.json(),{query:'央行'});
+  await f.updateGrants([]);
+  assert.equal((await identityService(request(),f.env)).status,403);
+});
