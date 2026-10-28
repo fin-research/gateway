@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { forwardedRequest, type GatewayContext } from './forward.ts';
 import type { SiteIdentity } from './lib/identity.ts';
 
-const dashboardTools = new Set(['market_report', 'save_market_report', 'hotspots', 'policies', 'policy_articles',
+const dashboardTools = new Set(['market_report', 'save_market_report', 'hotspots', 'policies', 'research_search', 'policy_articles',
   'update_policy_articles', 'article', 'news', 'commentaries', 'commentary', 'commentary_revisions',
   'create_commentary', 'update_commentary', 'economic_indicators', 'credit_report', 'bond_ledger']);
 const dataTools = new Set(['trading_days', 'chinamoney_shibor', 'omo', 'cfets', 'cfets_histories', 'bond_top_case',

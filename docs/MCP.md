@@ -33,13 +33,13 @@ OpenCode V2 配置：
 
 新增 CIMD 客户端时，通过 Auth0 CLI 的 `clients/cimd/preview` 校验官方元数据，再用 `clients/cimd/register` 导入；为返回的内部客户端 ID 单独配置本站 user grant、组织登录、刷新策略，并同步 Action 与 Gateway 精确名单。Auth0 原生 DCR 不为新客户端配置组织登录；动态 CIMD 的统一组织策略需要 Application Profiles。当前未开放这两种任意客户端自动注册路径。[Auth0 CIMD 配置](https://auth0.com/docs/get-started/auth0-overview/create-applications/register-applications-with-cimd)。
 
-程序化验收：`AUTH_TEST_ENV_FILE=<项目组.env> node --use-env-proxy scripts/verify-mcp-oauth.mjs`，覆盖发现、CIMD、成功/错误 issuer、真实账号 PKCE、签名身份、刷新、38工具及只读调用、普通 REST/Data 拒绝。二级池先读取可用日期，再以上海当日为 asOf 查询当年1月1日至当年最新可用台账日（无当年数据时截止 asOf）；设置 `MCP_EVIDENCE_DIR` 可保存目录和二级池业务回包，不保存身份或凭据。ChatGPT private-key exchange 须由 ChatGPT 主机完成，HTTP 脚本仅验证其真实授权与回调。
+程序化验收：`AUTH_TEST_ENV_FILE=<项目组.env> node --use-env-proxy scripts/verify-mcp-oauth.mjs`，覆盖发现、CIMD、成功/错误 issuer、真实账号 PKCE、签名身份、刷新、39工具及只读调用、普通 REST/Data 拒绝。二级池先读取可用日期，再以上海当日为 asOf 查询当年1月1日至当年最新可用台账日（无当年数据时截止 asOf）；设置 `MCP_EVIDENCE_DIR` 可保存目录和二级池业务回包，不保存身份或凭据。ChatGPT private-key exchange 须由 ChatGPT 主机完成，HTTP 脚本仅验证其真实授权与回调。
 
 OpenCode 验收使用同一脚本，增加 `MCP_OAUTH_CLIENT_ID=https://opencode.ai/oauth/opencode/client.json`；可用 `MCP_OAUTH_REDIRECT_URI=http://127.0.0.1:53683/mcp/oauth/callback` 检查旧回调。测试不附加 organization 参数，验证客户端自动流程。
 
 标准点评统一为 `/api/commentaries`，读权限为 `research.policy:read`，人工写入保留既有 `research.policy_commentary:update`。旧 tracking 与政策点评接口移除，无别名。MCP 只提供已审核业务数据与人工操作，不发布 AI 生成工具；网站显式生成继续受原权限约束。
 
-Gateway 使用无状态 MCP SDK 聚合 Dashboard 16 项与 Data 22 项候选工具，按应用返回的当前用户权限筛选目录；Schema 和业务执行留在应用层，通过 `GatewayDashboard` / `GatewayData` 命名 Service Binding 调用。二级池 `bond_ledger` 只读查询复用 `/bond` 的 `bond.ledger:read`，目录按权限筛选且执行时重新检查，不发布生成、写入或下载工具。Data 资讯列表命名 `news_list`，不发布 health、config、stock_summary。旧公网 `/api/mcp`、`/data/mcp` 返回410，无别名或重定向。内部应用路径仅供绑定调用。用户 token 不进入应用层，Data 使用 Gateway 注入的已验证用户与 Choice 准入上下文，不使用 InternalData、机器身份或 CAMEL 上下文。
+Gateway 使用无状态 MCP SDK 聚合 Dashboard 17 项与 Data 22 项候选工具，按应用返回的当前用户权限筛选目录；Schema 和业务执行留在应用层，通过 `GatewayDashboard` / `GatewayData` 命名 Service Binding 调用。二级池 `bond_ledger` 只读查询复用 `/bond` 的 `bond.ledger:read`，目录按权限筛选且执行时重新检查，不发布生成、写入或下载工具。Data 资讯列表命名 `news_list`，不发布 health、config、stock_summary。旧公网 `/api/mcp`、`/data/mcp` 返回410，无别名或重定向。内部应用路径仅供绑定调用。用户 token 不进入应用层，Data 使用 Gateway 注入的已验证用户与 Choice 准入上下文，不使用 InternalData、机器身份或 CAMEL 上下文。
 
 ## Cloudflare 门户历史配置
 
@@ -190,3 +190,7 @@ NO_PROXY=eastmoney-mcp.hasbai.xyz node --env-file=../eastmoney/.env --use-env-pr
 `credit_search` 工具发现和只读检索、Credit 后台 Ready 且目录与用户目录一致。检索片段正文不写日志。
 Data/Dashboard manual OAuth 的后台能力快照可滞后于用户目录。例如 Data 后台仍为 2026-09-09 的
 23 项，当前用户可见 25 项，新增的是 `data_trading_days`、`data_chinamoney_shibor`。
+
+## AI Search 研究检索
+
+`research_search` 通过 POST `/api/research/search` 读取原研究 AI Search，权限为 `research.article:read`。虽然传输为 POST，工具为只读；调用时重新检查当前权限。上游固定 `https://research.hasbai.xyz/mcp` 的 `search`，不转发用户 token，不调用生成模型。
